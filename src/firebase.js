@@ -2,6 +2,7 @@
 import { initializeApp } from "firebase/app";
 // Importamos la función para acceder a la base de datos en tiempo real
 import { getFirestore } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 
 // Las credenciales exactas de tu proyecto 'asador-saas'
 const firebaseConfig = {
@@ -19,3 +20,5 @@ const app = initializeApp(firebaseConfig);
 // 2. Activamos la base de datos Firestore y la exportamos como "db" 
 // para que el Dashboard y el ClienteMenu puedan leer y escribir en ella.
 export const db = getFirestore(app);
+export const auth = getAuth(app);
+
