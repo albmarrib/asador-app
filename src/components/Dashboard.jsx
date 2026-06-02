@@ -9,8 +9,10 @@ export default function Dashboard() {
   const [franjas, setFranjas] = useState([]);
   const [pedidos, setPedidos] = useState([]);
   const [productos, setProductos] = useState([]); 
-  const [filtroHora, setFiltroHora] = useState('Todos');
-  const [busqueda, setBusqueda] = useState(''); 
+const [filtroHora, setFiltroHora] = useState('Todos');
+const [busqueda, setBusqueda] = useState(''); 
+const [mostrarSoloPendientes, setMostrarSoloPendientes] = useState(true);
+
   
   // ESTADOS MODALES PANTALLA COMPLETA
   const [modalAbierto, setModalAbierto] = useState(false);
@@ -19,6 +21,9 @@ export default function Dashboard() {
   const [modalProduccionAbierto, setModalProduccionAbierto] = useState(false); 
   const [modalVentaDirectaAbierto, setModalVentaDirectaAbierto] = useState(false); 
   const [pedidoSeleccionado, setPedidoSeleccionado] = useState(null); // Para el nuevo modal de gestión
+// ESTADOS NUEVO MODAL DETALLE DE FRANJA
+const [modalDetalleFranjaAbierto, setModalDetalleFranjaAbierto] = useState(false);
+const [franjaDetalleSeleccionada, setFranjaDetalleSeleccionada] = useState(null);
 
 
   // ESTADOS FORMULARIO RESERVA MANUAL
@@ -229,29 +234,36 @@ export default function Dashboard() {
   };
 
   const handleGuardarPedido = async () => {
-    if (!nombreCliente.trim()) { setErrorValidacion('⚠️ El nombre del cliente es obligatorio.'); return; }
-    if (!horaSeleccionada) { setErrorValidacion('⚠️ Necesitas configurar al menos una franja horaria.'); return; }
+  if (!nombreCliente.trim()) { setErrorValidacion('⚠️ El nombre del cliente es obligatorio.'); return; }
+  if (!horaSeleccionada) { setErrorValidacion('⚠️ Necesitas configurar al menos una franja horaria.'); return; }
 
-    const lineasTicket = [];
-    let stockConsumido = 0;
+  const lineasTicket = [];
+  let stockConsumido = 0;
 
-    Object.entries(carritoExtras).forEach(([prodId, cant]) => {
-      const prodInfo = productos.find(p => p.id === prodId);
-      if (prodInfo) {
-        lineasTicket.push(`${cant}x ${prodInfo.nombre}`);
-        if (prodInfo.controlaStock) stockConsumido += (parseFloat(prodInfo.consumeUnidades) * cant);
-      }
-    });
+  Object.entries(carritoExtras).forEach(([prodId, cant]) => {
+    const prodInfo = productos.find(p => p.id === prodId);
+    if (prodInfo) {
+      lineasTicket.push(`${cant}x ${prodInfo.nombre}`);
+      if (prodInfo.controlaStock) stockConsumido += (parseFloat(prodInfo.consumeUnidades) * cant);
+    }
+  });
 
-    if (lineasTicket.length === 0) { setErrorValidacion('⚠️ El pedido no puede estar vacío. Añade algún producto.'); return; }
-    const detalleTexto = `${stockConsumido} | ` + lineasTicket.join(' + ');
+  if (lineasTicket.length === 0) { setErrorValidacion('⚠️ El pedido no puede estar vacío. Añade algún producto.'); return; }
+  
+  const detalleTexto = `${stockConsumido} | ` + lineasTicket.join(' + ');
 
-    await addDoc(collection(db, 'pedidos'), {
-      local: LOCAL_ID, cliente: nombreCliente.trim().toUpperCase(), hora: horaSeleccionada,
-      detalle: detalleTexto, entregado: false, origen: 'Mostrador/Teléfono', creadoEn: new Date()
-    });
-    setModalAbierto(false);
-  };
+  await addDoc(collection(db, 'pedidos'), {
+    local: LOCAL_ID, 
+    cliente: nombreCliente.trim().toUpperCase(), 
+    hora: horaSeleccionada,
+    detalle: detalleTexto, 
+    entregado: false, 
+    cobrado: false,
+    origen: 'Mostrador/Teléfono', 
+    creadoEn: new Date()
+  });
+  setModalAbierto(false);
+};
 
   // --- TPV VENTA DIRECTA ---
   const handleModificarVDExtra = (productoId, incremento) => {
@@ -458,24 +470,32 @@ export default function Dashboard() {
                 }
 
                 return (
-                  <div key={f.id} className={`p-4 rounded-xl border flex flex-col gap-2 ${estiloFila}`}>
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <span className="font-black text-xl text-slate-800">{f.hora}</span>
-                        <span className="block text-xs font-bold text-slate-500 mt-0.5">
-                          {reservados} / {f.max} pollos comprometidos
-                        </span>
-                      </div>
-                      <button onClick={() => abrirModalCarga(f.id)} className="bg-white hover:bg-orange-50 text-orange-600 border border-orange-200 font-bold px-4 py-2 rounded-xl shadow-sm text-sm uppercase cursor-pointer">
-                        ⚙️ Cargar
-                      </button>
-                    </div>
-                    {faltaPollo > 0 && <div className="bg-rose-600 text-white font-black text-xs px-3 py-1.5 rounded-lg">🚨 FALTAN {faltaPollo} POLLOS</div>}
-                    <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden shadow-inner mt-2">
-                      <div className={`h-3 rounded-full transition-all duration-300 ${colorBarra}`} style={{ width: `${Math.min(porcentaje, 100)}%` }}></div>
-                    </div>
-                  </div>
-                );
+<div 
+  key={f.id} 
+  onClick={() => { setFranjaDetalleSeleccionada(f); setModalDetalleFranjaAbierto(true); }}
+  className={`p-4 rounded-xl border flex flex-col gap-2 cursor-pointer hover:shadow-md hover:scale-[1.01] transition-all ${estiloFila}`}
+>
+  <div className="flex justify-between items-center">
+    <div>
+      <span className="font-black text-xl text-slate-800">{f.hora}</span>
+      <span className="block text-xs font-bold text-slate-500 mt-0.5">
+        {reservados} / {f.max} pollos comprometidos
+      </span>
+    </div>
+    <button 
+      onClick={(e) => { e.stopPropagation(); abrirModalCarga(f.id); }} 
+      className="bg-white hover:bg-orange-50 text-orange-600 border border-orange-200 font-bold px-4 py-2 rounded-xl shadow-sm text-sm uppercase cursor-pointer z-10"
+    >
+      ⚙️ Cargar
+    </button>
+  </div>
+  {faltaPollo > 0 && <div className="bg-rose-600 text-white font-black text-xs px-3 py-1.5 rounded-lg">🚨 FALTAN {faltaPollo} POLLOS</div>}
+  <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden shadow-inner mt-2">
+    <div className={`h-3 rounded-full transition-all duration-300 ${colorBarra}`} style={{ width: `${Math.min(porcentaje, 100)}%` }}></div>
+  </div>
+</div>
+);
+
               })}
             </div>
           </section>
@@ -492,44 +512,64 @@ export default function Dashboard() {
           })}
         </div>
 
-              <div className="w-full md:w-64 shrink-0">
-                <input type="text" placeholder="🔍 Buscar nombre..." value={busqueda} onChange={(e) => setBusqueda(e.target.value.toUpperCase())} className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-700 uppercase focus:outline-none focus:border-orange-500 placeholder:text-slate-400" />
-              </div>
+<div className="w-full md:w-auto shrink-0 flex gap-2">
+  <button onClick={() => setMostrarSoloPendientes(!mostrarSoloPendientes)} title={mostrarSoloPendientes ? 'Ver todos los pedidos' : 'Ver solo pendientes'} className={`w-12 h-12 shrink-0 flex items-center justify-center rounded-xl text-2xl border-2 transition-all cursor-pointer ${mostrarSoloPendientes ? 'bg-amber-100 border-amber-300' : 'bg-slate-100 border-slate-200 hover:bg-slate-200'}`}>
+    {mostrarSoloPendientes ? '👀' : '👁️'}
+  </button>
+  <input type="text" placeholder="🔍 Buscar..." value={busqueda} onChange={(e) => setBusqueda(e.target.value.toUpperCase())} className="w-full md:w-48 bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-700 uppercase focus:outline-none focus:border-orange-500 placeholder:text-slate-400" />
+</div>
+
             </div>
 
             <div className="space-y-3 max-h-[550px] overflow-y-auto pr-1">
               {pedidosProcesados.length === 0 ? (
                 <div className="text-center text-slate-400 font-bold py-10 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-sm">No hay pedidos registrados.</div>
               ) : (
-                pedidosProcesados
-                .filter(p => filtroHora === 'Todos' ? true : p.hora === filtroHora)
-                .filter(p => busqueda === '' ? true : p.cliente.includes(busqueda))
-                .map((p) => (
-<div key={p.id} onClick={() => { if(p.cliente !== 'VENTA DIRECTA') setPedidoSeleccionado(p) }} className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${p.cliente === 'VENTA DIRECTA' ? 'cursor-default' : 'cursor-pointer hover:scale-[1.01]'} ${p.entregado ? 'bg-slate-50 border-slate-200 opacity-55' : 'bg-amber-50/40 border-amber-200 shadow-sm'}`}>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-mono font-black bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">{p.origen === 'QR' ? '📲 WEB' : '📞 TIENDA'}</span>
-                        <span className={`text-[9px] px-2 py-0.5 rounded font-black tracking-wider ${p.entregado ? 'bg-slate-400 text-white' : 'bg-amber-500 text-white'}`}>{p.entregado ? '✓ ENTREGADO' : '⏳ PENDIENTE'}</span>
-                      </div>
-                      <h3 className="text-xl font-black text-slate-800 mt-1.5 uppercase tracking-tight">{p.cliente}</h3>
-                      <p className="text-sm font-extrabold text-slate-600 mt-0.5">{p.detalle}</p>
-                    </div>
+      pedidosProcesados
+        .filter(p => filtroHora === 'Todos' ? true : p.hora === filtroHora)
+        .filter(p => busqueda === '' ? true : p.cliente.includes(busqueda))
+        .filter(p => {
+          if (!mostrarSoloPendientes) return true; // Si está en "Viendo Todos", los mostramos
+          const esVentaDirecta = p.cliente === 'VENTA DIRECTA';
+          const estaCobrado = p.cobrado || esVentaDirecta;
+          return !(p.entregado && estaCobrado); // Si está entregado y cobrado, lo escondemos
+        })
+        .map((p) => {
 
-                    <div className="flex sm:flex-col items-end sm:items-center justify-between gap-3 pt-2 sm:pt-0 border-t sm:border-0 border-slate-200/60">
-                      <span className="text-lg font-black text-orange-600 bg-orange-50 px-3 py-1 rounded-xl border border-orange-200 font-mono">⏰ {p.hora}</span>
-                      <div className="flex gap-1.5">
-                        {!p.entregado && (
-                          <select onChange={(e) => handleReubicarPedido(p.id, e.target.value)} className="bg-white border border-slate-300 text-xs font-bold rounded-xl px-2 py-1 focus:outline-none cursor-pointer" defaultValue="">
-                            <option value="" disabled>↪️ Mover hora</option>
-                            {franjas.map(fr => <option key={fr.id} value={fr.hora.split(' ')[0]}>{fr.hora.split(' ')[0]}</option>)}
-                          </select>
-                        )}
-                        <button onClick={() => handleAnularPedido(p.id)} className="bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 font-bold text-xs px-3 py-1.5 rounded-xl cursor-pointer">❌ Anular</button>
-                        {!p.entregado && <button onClick={() => handleEntregar(p.id)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-4 py-2 rounded-xl shadow cursor-pointer">✓ Entregar</button>}
-                      </div>
-                    </div>
-                  </div>
-                ))
+  const esVentaDirecta = p.cliente === 'VENTA DIRECTA';
+  // Si es Venta Directa, lo forzamos a 'cobrado' para arreglar los pedidos viejos
+  const estaCobrado = p.cobrado || esVentaDirecta; 
+
+  return (
+    <div key={p.id} onClick={() => { if(!esVentaDirecta) setPedidoSeleccionado(p) }} className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${esVentaDirecta ? 'cursor-default' : 'cursor-pointer hover:scale-[1.01]'} ${(p.entregado && estaCobrado) ? 'bg-slate-50 border-slate-200 opacity-55' : (p.entregado && !estaCobrado) ? 'bg-rose-50 border-rose-300 shadow-sm ring-2 ring-rose-500/50' : 'bg-amber-50/40 border-amber-200 shadow-sm'}`}>
+      <div className="flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-mono font-black bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">{p.origen === 'QR' ? '📲 WEB' : '📞 TIENDA'}</span>
+          
+          {/* Etiquetas de estado claras y a prueba de tontos */}
+          {(!p.entregado) && <span className="text-[9px] px-2 py-0.5 rounded font-black tracking-wider bg-amber-500 text-white">⏳ PENDIENTE</span>}
+          {(p.entregado && estaCobrado) && <span className="text-[9px] px-2 py-0.5 rounded font-black tracking-wider bg-slate-400 text-white">✓ FINALIZADO</span>}
+          {(p.entregado && !estaCobrado) && <span className="text-xs px-3 py-1 rounded-lg font-black tracking-wider bg-rose-600 text-white animate-pulse shadow-md">⚠️ FALTA COBRAR</span>}
+        </div>
+        <h3 className="text-xl font-black text-slate-800 mt-2 uppercase tracking-tight">{p.cliente}</h3>
+        <p className="text-sm font-extrabold text-slate-600 mt-0.5">{p.detalle}</p>
+      </div>
+
+      <div className="flex sm:flex-col items-end sm:items-center justify-between gap-3 pt-2 sm:pt-0 border-t sm:border-0 border-slate-200/60">
+        <span className="text-lg font-black text-orange-600 bg-orange-50 px-3 py-1 rounded-xl border border-orange-200 font-mono">⏰ {p.hora}</span>
+        <div className="flex gap-1.5">
+          {!p.entregado && (
+            <select onClick={(e) => e.stopPropagation()} onChange={(e) => handleReubicarPedido(p.id, e.target.value)} className="bg-white border border-slate-300 text-xs font-bold rounded-xl px-2 py-1 focus:outline-none cursor-pointer" defaultValue="">
+              <option value="" disabled>↪️ Mover hora</option>
+              {franjas.map(fr => <option key={fr.id} value={fr.hora.split(' ')[0]}>{fr.hora.split(' ')[0]}</option>)}
+            </select>
+          )}
+          <button onClick={(e) => { e.stopPropagation(); handleAnularPedido(p.id); }} className="bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 font-bold text-xs px-3 py-1.5 rounded-xl cursor-pointer">❌ Anular</button>
+        </div>
+      </div>
+    </div>
+  );
+})
               )}
             </div>
           </section>
@@ -875,12 +915,21 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 mt-2">
-        {!pedidoSeleccionado.entregado && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <button onClick={() => { handleEntregar(pedidoSeleccionado.id); setPedidoSeleccionado(null); }} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black py-6 rounded-2xl uppercase text-2xl shadow-xl border-b-8 border-emerald-800 cursor-pointer active:scale-95 transition-all">✓ ENTREGAR</button>
-            <button onClick={() => { handleCobrarPedido(pedidoSeleccionado.id); setPedidoSeleccionado(null); }} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black py-6 rounded-2xl uppercase text-2xl shadow-xl border-b-8 border-indigo-800 cursor-pointer active:scale-95 transition-all">🪙 COBRAR Y DAR</button>
+        {/* BLOQUE PRINCIPAL DE COBRO Y ENTREGA */}
+        {!pedidoSeleccionado.cobrado && (
+          <div className="bg-indigo-50 border-4 border-indigo-100 p-5 rounded-2xl flex flex-col gap-4 shadow-inner">
+            <button onClick={() => { handleCobrarPedido(pedidoSeleccionado.id); setPedidoSeleccionado(null); }} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-6 rounded-2xl uppercase text-3xl shadow-xl border-b-8 border-indigo-800 cursor-pointer active:scale-95 transition-all">
+              🪙 {pedidoSeleccionado.entregado ? 'COBRAR LO PENDIENTE' : 'COBRAR Y ENTREGAR'}
+            </button>
+            
+            {!pedidoSeleccionado.entregado && (
+              <button onClick={() => { handleEntregar(pedidoSeleccionado.id); setPedidoSeleccionado(null); }} className="w-full bg-amber-200 hover:bg-amber-300 text-amber-800 font-black py-4 rounded-xl uppercase text-sm border-2 border-amber-400 cursor-pointer active:scale-95 transition-all">
+                ⚠️ Entregar en mano ahora, pero dejar PENDIENTE DE PAGO
+              </button>
+            )}
           </div>
         )}
+
         
         <div className="bg-slate-100 p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 border-2 border-slate-200">
           <span className="font-black text-slate-600 uppercase text-lg">↪️ Mover a otra hora:</span>
@@ -895,6 +944,136 @@ export default function Dashboard() {
     </div>
   </div>
 )}
+      {/* MODAL GIGANTE 6: DETALLE DE FRANJA (INFORME) */}
+      {modalDetalleFranjaAbierto && franjaDetalleSeleccionada && (() => {
+        const horaInicio = franjaDetalleSeleccionada.hora.split(' ')[0];
+        
+        // 1. Filtramos pedidos solo de esta hora
+        const pedidosFranja = pedidos.filter(p => p.hora === horaInicio);
+        // 2. Filtramos pedidos desde el principio del día hasta esta hora (para el acumulado)
+        const pedidosAcumulados = pedidos.filter(p => p.hora <= horaInicio);
+
+        // Motor de conteo de productos buscando dentro del texto del ticket
+        const contarProd = (lista, nombre) => {
+          let c = 0;
+          lista.forEach(p => {
+            const texto = p.detalle.includes('|') ? p.detalle.split('|')[1] : p.detalle;
+            texto.split('+').forEach(parte => {
+              const match = parte.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(.*)/i);
+              if (match && match[2].trim().toUpperCase() === nombre.toUpperCase()) {
+                c += parseFloat(match[1]);
+              }
+            });
+          });
+          return c;
+        };
+
+        const prodsConStock = productosOrdenados.filter(p => p.controlaStock);
+        const prodsSinStock = productosOrdenados.filter(p => !p.controlaStock);
+
+        // Emparejar nombre del producto con la capacidad configurada en la franja
+        const getCapacidad = (nombre) => {
+          const n = nombre.toUpperCase();
+          if (n.includes('POLLO')) return franjaDetalleSeleccionada.capacidad?.pollos || franjaDetalleSeleccionada.max || 0;
+          if (n.includes('PATATA')) return franjaDetalleSeleccionada.capacidad?.patatas || 0;
+          if (n.includes('BUTIFARRA')) return franjaDetalleSeleccionada.capacidad?.butifarras || 0;
+          return '—';
+        };
+
+        return (
+          <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-md flex items-center justify-center p-4 lg:p-10 z-50 overflow-hidden">
+            <div className="bg-white rounded-[2rem] w-full max-w-7xl h-[90vh] flex flex-col shadow-2xl overflow-hidden border-4 border-emerald-500">
+              
+              {/* CABECERA */}
+              <div className="bg-emerald-600 p-6 flex justify-between items-center text-white shrink-0">
+                <h3 className="text-3xl font-black uppercase tracking-tight">
+                  📊 INFORME FRANJA: <span className="font-mono bg-white text-emerald-700 px-4 py-1 rounded-xl ml-2 tracking-wider">{franjaDetalleSeleccionada.hora}</span>
+                </h3>
+                <button onClick={() => { setModalDetalleFranjaAbierto(false); setFranjaDetalleSeleccionada(null); }} className="bg-emerald-700 hover:bg-rose-600 font-black text-2xl px-6 py-2 rounded-xl cursor-pointer transition-colors border-b-4 border-emerald-900">✕ CERRAR</button>
+              </div>
+
+              <div className="p-8 flex-1 overflow-y-auto bg-slate-50 space-y-10">
+                
+                {/* TABLA 1: PRODUCTOS CON STOCK (HORNOS) */}
+                <div>
+                  <h4 className="text-2xl font-black text-slate-800 uppercase mb-4 border-b-4 border-slate-200 pb-2 flex items-center gap-3">
+                    🔥 PRODUCTOS EN HORNO (CON CAPACIDAD)
+                  </h4>
+                  <div className="bg-white rounded-3xl shadow-sm border-2 border-slate-200 overflow-hidden">
+                    <div className="grid grid-cols-6 bg-slate-100 p-4 border-b-2 border-slate-200 text-xs md:text-sm font-black text-slate-500 uppercase tracking-wider text-center">
+                      <div className="text-left">Producto</div>
+                      <div>Capacidad</div>
+                      <div>Reservados</div>
+                      <div>Entregados</div>
+                      <div>Pendientes</div>
+                      <div className="text-emerald-700">Libres</div>
+                    </div>
+                    <div className="divide-y-2 divide-slate-100">
+                      {prodsConStock.map(p => {
+                        const cap = getCapacidad(p.nombre);
+                        const res = contarProd(pedidosFranja, p.nombre);
+                        const ent = contarProd(pedidosFranja.filter(ped => ped.entregado), p.nombre);
+                        const pend = res - ent;
+                        const libres = cap === '—' ? '—' : Math.max(0, cap - res);
+                        
+                        return (
+                          <div key={p.id} className="grid grid-cols-6 p-4 items-center text-center font-mono font-bold text-lg hover:bg-slate-50 transition-colors">
+                            <div className="text-left font-black font-sans text-slate-800 uppercase">{p.nombre}</div>
+                            <div className="text-slate-600 bg-slate-100 mx-auto px-4 py-1 rounded-lg">{cap}</div>
+                            <div className="text-amber-600">{res}</div>
+                            <div className="text-indigo-600">{ent}</div>
+                            <div className="text-rose-600">{pend}</div>
+                            <div className="text-emerald-700 font-black bg-emerald-50 mx-auto px-4 py-1 rounded-lg border border-emerald-200">{libres}</div>
+                          </div>
+                        );
+                      })}
+                      {prodsConStock.length === 0 && <div className="p-8 text-center text-slate-400 font-bold uppercase">No hay productos con control de stock</div>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* TABLA 2: RESTO DE PRODUCTOS (SIN STOCK) */}
+                <div>
+                  <h4 className="text-2xl font-black text-slate-800 uppercase mb-4 border-b-4 border-slate-200 pb-2 flex items-center gap-3">
+                    🛒 RESTO DE PRODUCTOS (SIN LÍMITE DE HORNO)
+                  </h4>
+                  <div className="bg-white rounded-3xl shadow-sm border-2 border-slate-200 overflow-hidden">
+                    <div className="grid grid-cols-4 bg-slate-100 p-4 border-b-2 border-slate-200 text-xs md:text-sm font-black text-slate-500 uppercase tracking-wider text-center">
+                      <div className="text-left">Producto</div>
+                      <div>Reservados (Franja)</div>
+                      <div>Entregados (Franja)</div>
+                      <div className="text-indigo-700">Total Acumulado Hoy</div>
+                    </div>
+                    <div className="divide-y-2 divide-slate-100">
+                      {prodsSinStock.map(p => {
+                        const res = contarProd(pedidosFranja, p.nombre);
+                        const ent = contarProd(pedidosFranja.filter(ped => ped.entregado), p.nombre);
+                        const acum = contarProd(pedidosAcumulados, p.nombre);
+                        
+                        // Ocultamos los productos que están a 0 en todo para que la lista no sea gigante e inútil
+                        if(res === 0 && acum === 0) return null; 
+
+                        return (
+                          <div key={p.id} className="grid grid-cols-4 p-4 items-center text-center font-mono font-bold text-lg hover:bg-slate-50 transition-colors">
+                            <div className="text-left font-black font-sans text-slate-800 uppercase">{p.nombre}</div>
+                            <div className="text-amber-600">{res}</div>
+                            <div className="text-emerald-600">{ent}</div>
+                            <div className="text-indigo-700 font-black bg-indigo-50 mx-auto px-6 py-1 rounded-lg border border-indigo-200">{acum}</div>
+                          </div>
+                        );
+                      })}
+                      {prodsSinStock.every(p => contarProd(pedidosFranja, p.nombre) === 0 && contarProd(pedidosAcumulados, p.nombre) === 0) && (
+                        <div className="p-8 text-center text-slate-400 font-bold uppercase tracking-wider">No hay ventas registradas de extras hasta esta hora.</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
 </div>
 );
