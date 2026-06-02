@@ -7,18 +7,16 @@ const LOCAL_ID = 'asador-dc';
 export default function ClienteMenu() {
   const [franjas, setFranjas] = useState([]);
   const [productos, setProductos] = useState([]);
-  const [pedidos, setPedidos] = useState([]); // NUEVO: El móvil ahora "escucha" los pedidos globales
+  const [pedidos, setPedidos] = useState([]);
   
-  const [cantidadPollos, setCantidadPollos] = useState(1); 
-  const [carritoExtras, setCarritoExtras] = useState({});
+  // NUEVO: Un único carrito universal para todo
+  const [carrito, setCarrito] = useState({});
   const [horaRecogida, setHoraRecogida] = useState('');
   const [nombreCliente, setNombreCliente] = useState('');
-  
   const [pedidoConfirmado, setPedidoConfirmado] = useState(false);
   const [ticketId, setTicketId] = useState('');
   const [errorFormulario, setErrorFormulario] = useState('');
 
-  // --- ESCUCHAR DATOS DE LA NUBE ---
   useEffect(() => {
     const qFranjas = query(collection(db, 'franjas'), where('local', '==', LOCAL_ID));
     const unsubscribeFranjas = onSnapshot(qFranjas, (snapshot) => {
@@ -32,16 +30,14 @@ export default function ClienteMenu() {
       setProductos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
 
-    // NUEVO: Escuchar todos los pedidos activos para restar el stock
     const qPedidos = query(collection(db, 'pedidos'), where('local', '==', LOCAL_ID));
     const unsubscribePedidos = onSnapshot(qPedidos, (snapshot) => {
       setPedidos(
         snapshot.docs
           .map(doc => ({ id: doc.id, ...doc.data() }))
-          .filter(p => !p.archivado) // <--- ESTO ES LO ÚNICO NUEVO
+          .filter(p => !p.archivado)
       );
     });
-
 
     return () => {
       unsubscribeFranjas();
@@ -50,31 +46,43 @@ export default function ClienteMenu() {
     };
   }, []);
 
-  // --- LÓGICA DE STOCK EN TIEMPO REAL ---
+  // --- LÓGICA DE STOCK Y CARRITO ---
+  
+  // Extrae el consumo usando parseFloat para que entienda los decimales (0.5)
   const obtenerReservadosPorFranja = (horaFranjaInicio) => {
     return pedidos
       .filter(p => p.hora === horaFranjaInicio && !p.entregado)
-      .reduce((sum, p) => sum + (parseInt(p.detalle) || 0), 0);
+      .reduce((sum, p) => sum + (parseFloat(p.detalle) || 0), 0);
   };
 
-  // Verificamos si la hora que el cliente ya tenía seleccionada se ha quedado sin stock
-  // al añadir más pollos al carrito. Si es así, se la deseleccionamos.
+  // Suma cuánto espacio de horno requiere nuestro carrito actual
+  const calcularUnidadesConsumidas = () => {
+    let unidades = 0;
+    Object.entries(carrito).forEach(([id, cant]) => {
+      const p = productos.find(x => x.id === id);
+      if (p && p.controlaStock) {
+        unidades += (parseFloat(p.consumeUnidades) * cant);
+      }
+    });
+    return unidades;
+  };
+
+  // Verifica si el carrito supera el stock o hay que deseleccionar la hora
   useEffect(() => {
     if (horaRecogida) {
       const franjaActual = franjas.find(f => f.hora.split(' ')[0] === horaRecogida);
       if (franjaActual) {
         const reservados = obtenerReservadosPorFranja(horaRecogida);
         const disponibles = Math.max(franjaActual.max - reservados, 0);
-        if (cantidadPollos > disponibles) {
-          setHoraRecogida(''); // Resetea la hora si pide más de los que caben
+        if (calcularUnidadesConsumidas() > disponibles) {
+          setHoraRecogida(''); 
         }
       }
     }
-  }, [cantidadPollos, franjas, pedidos, horaRecogida]);
+  }, [carrito, franjas, pedidos, horaRecogida]);
 
-  // --- LÓGICA DEL CARRITO ---
-  const handleModificarExtra = (id, incremento) => {
-    setCarritoExtras(prev => {
+  const handleModificarCarrito = (id, incremento) => {
+    setCarrito(prev => {
       const actual = prev[id] || 0;
       const nueva = Math.max(actual + incremento, 0);
       if (nueva === 0) {
@@ -86,22 +94,28 @@ export default function ClienteMenu() {
   };
 
   const calcularTotal = () => {
-    let total = cantidadPollos * 12.50; 
-    Object.entries(carritoExtras).forEach(([id, cant]) => {
+    let total = 0;
+    Object.entries(carrito).forEach(([id, cant]) => {
       const p = productos.find(x => x.id === id);
       if (p) total += (p.precio * cant);
     });
     return total;
   };
 
-  const totalArticulos = cantidadPollos + Object.values(carritoExtras).reduce((sum, q) => sum + q, 0);
+  const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
+
+  // NUEVO: Vigilante de la Paella
+  const tienePaella = Object.entries(carrito).some(([id, cant]) => {
+    const p = productos.find(x => x.id === id);
+    return p && p.nombre.includes('PAELLA') && cant > 0;
+  });
 
   // --- ENVIAR A FIREBASE ---
   const handleEnviarReserva = async (e) => {
     e.preventDefault();
     setErrorFormulario('');
 
-    if (cantidadPollos === 0 && Object.keys(carritoExtras).length === 0) {
+    if (totalArticulos === 0) {
       setErrorFormulario('⚠️ Tu pedido está vacío.');
       return;
     }
@@ -114,13 +128,16 @@ export default function ClienteMenu() {
       return;
     }
 
-    let detalleTexto = `${cantidadPollos} ${cantidadPollos > 1 ? 'Pollos' : 'Pollo'}`;
-    Object.entries(carritoExtras).forEach(([prodId, cant]) => {
-      const prodInfo = productos.find(p => p.id === prodId);
-      if (prodInfo) {
-        detalleTexto += ` + ${cant}x ${prodInfo.nombre}`;
-      }
+    const unidadesConsumidas = calcularUnidadesConsumidas();
+    const lineasTicket = [];
+    Object.entries(carrito).forEach(([id, cant]) => {
+      const p = productos.find(x => x.id === id);
+      if (p) lineasTicket.push(`${cant}x ${p.nombre}`);
     });
+    
+    // TRUCO: Empezamos el texto con el número de unidades consumidas (ej: "1.5 | ...")
+    // Así la tablet del asador podrá leer este número al instante y descontarlo del stock.
+    const detalleTexto = `${unidadesConsumidas} | ` + lineasTicket.join(' + ');
 
     try {
       const docRef = await addDoc(collection(db, 'pedidos'), {
@@ -165,13 +182,7 @@ export default function ClienteMenu() {
             </div>
             <div className="border-t border-slate-200 pt-2 text-xs text-slate-600 space-y-1">
               <span className="block font-bold text-[10px] text-slate-400 uppercase mb-1">Detalle:</span>
-              {cantidadPollos > 0 && (
-                <div className="flex justify-between">
-                  <span>{cantidadPollos}x Pollo al Ast</span>
-                  <span>{(cantidadPollos * 12.50).toFixed(2)}€</span>
-                </div>
-              )}
-              {Object.entries(carritoExtras).map(([id, cant]) => {
+              {Object.entries(carrito).map(([id, cant]) => {
                 const p = productos.find(x => x.id === id);
                 if (!p) return null;
                 return (
@@ -202,29 +213,19 @@ export default function ClienteMenu() {
       </header>
 
       <main className="max-w-md mx-auto p-4 space-y-6">
-        
-        {/* SECCIÓN 1: PRODUCTOS */}
         <section className="space-y-3">
           <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">🍗 Nuestra Carta</h2>
           
-          <div className="bg-white rounded-2xl p-4 border border-orange-200 shadow-sm flex items-center justify-between gap-4 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-orange-500"></div>
-            <div className="flex-1 pl-2">
-              <h3 className="text-base font-black text-slate-800 leading-tight">Pollo al Ast Entero</h3>
-              <p className="text-slate-400 text-xs mt-1 font-medium leading-relaxed">Receta tradicional con hierbas.</p>
-              <span className="text-sm font-black text-orange-600 block mt-2">12.50€</span>
-            </div>
-            <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl p-1">
-              <button onClick={() => setCantidadPollos(prev => Math.max(prev - 1, 0))} className="w-8 h-8 font-black text-slate-600 bg-white rounded-lg shadow-sm border border-slate-200 flex items-center justify-center active:scale-90 cursor-pointer">-</button>
-              <span className="w-8 text-center font-bold font-mono text-slate-800 text-sm">{cantidadPollos}</span>
-              <button onClick={() => setCantidadPollos(prev => prev + 1)} className="w-8 h-8 font-black text-slate-600 bg-white rounded-lg shadow-sm border border-slate-200 flex items-center justify-center active:scale-90 cursor-pointer">+</button>
-            </div>
-          </div>
+          {productos.length === 0 && (
+             <p className="text-slate-400 text-sm text-center bg-white p-4 rounded-xl border border-slate-200">
+               El menú de hoy se está cargando o no hay productos configurados...
+             </p>
+          )}
 
           {productos.map((plato) => {
-            const cantidad = carritoExtras[plato.id] || 0;
+            const cantidad = carrito[plato.id] || 0;
             return (
-              <div key={plato.id} className="bg-white rounded-2xl p-4 border border-orange-100/60 shadow-sm flex items-center justify-between gap-4">
+              <div key={plato.id} className={`bg-white rounded-2xl p-4 border shadow-sm flex items-center justify-between gap-4 transition-all ${cantidad > 0 ? 'border-orange-400' : 'border-orange-100/60'}`}>
                 <div className="flex-1">
                   <h3 className="text-base font-black text-slate-800 leading-tight uppercase">{plato.nombre}</h3>
                   <span className="text-sm font-black text-orange-600 block mt-1">{parseFloat(plato.precio).toFixed(2)}€</span>
@@ -232,12 +233,12 @@ export default function ClienteMenu() {
                 <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl p-1 shadow-inner">
                   {cantidad > 0 ? (
                     <>
-                      <button onClick={() => handleModificarExtra(plato.id, -1)} className="w-8 h-8 font-black text-slate-600 bg-white rounded-lg shadow-sm border border-slate-200 flex items-center justify-center active:scale-90 cursor-pointer">-</button>
+                      <button onClick={() => handleModificarCarrito(plato.id, -1)} className="w-8 h-8 font-black text-slate-600 bg-white rounded-lg shadow-sm border border-slate-200 flex items-center justify-center active:scale-90 cursor-pointer">-</button>
                       <span className="w-8 text-center font-bold font-mono text-slate-800 text-sm">{cantidad}</span>
-                      <button onClick={() => handleModificarExtra(plato.id, 1)} className="w-8 h-8 font-black text-slate-600 bg-white rounded-lg shadow-sm border border-slate-200 flex items-center justify-center active:scale-90 cursor-pointer">+</button>
+                      <button onClick={() => handleModificarCarrito(plato.id, 1)} className="w-8 h-8 font-black text-slate-600 bg-white rounded-lg shadow-sm border border-slate-200 flex items-center justify-center active:scale-90 cursor-pointer">+</button>
                     </>
                   ) : (
-                    <button onClick={() => handleModificarExtra(plato.id, 1)} className="bg-slate-800 text-white font-black text-xs px-4 py-2.5 rounded-lg shadow-sm active:scale-95 transition-all cursor-pointer">AÑADIR</button>
+                    <button onClick={() => handleModificarCarrito(plato.id, 1)} className="bg-slate-800 text-white font-black text-xs px-4 py-2.5 rounded-lg shadow-sm active:scale-95 transition-all cursor-pointer">AÑADIR</button>
                   )}
                 </div>
               </div>
@@ -245,10 +246,8 @@ export default function ClienteMenu() {
           })}
         </section>
 
-        {/* SECCIÓN 2: RECOGIDA Y FORMULARIO */}
         <section className="bg-white rounded-2xl p-5 border border-orange-100/60 shadow-sm space-y-4">
           <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">📋 Confirmar recogida</h2>
-          
           {franjas.length === 0 ? (
             <p className="text-rose-500 font-bold text-sm bg-rose-50 p-3 rounded-lg text-center">
               Aún no hay horas disponibles para hoy.
@@ -259,19 +258,34 @@ export default function ClienteMenu() {
               <div className="grid grid-cols-3 gap-2">
                 {franjas.map(f => {
                   const h = f.hora.split(' ')[0];
-                  // CALCULAMOS LA DISPONIBILIDAD REAL AQUÍ
+                  
+                  // LÓGICA DE PAELLAS (Bloquear menos de 2 horas)
+                  let bloqueadoPorPaella = false;
+                  if (tienePaella) {
+                    const ahora = new Date();
+                    const [horas, minutos] = h.split(':');
+                    const horaFranja = new Date();
+                    horaFranja.setHours(parseInt(horas), parseInt(minutos), 0, 0);
+                    if ((horaFranja - ahora) < 120 * 60 * 1000) {
+                      bloqueadoPorPaella = true;
+                    }
+                  }
+
                   const reservados = obtenerReservadosPorFranja(h);
                   const disponibles = Math.max(f.max - reservados, 0);
-                  const cabenEnElHorno = disponibles >= cantidadPollos; // ¿Hay hueco para lo que me pide?
+                  const unidadesPedidas = calcularUnidadesConsumidas();
+                  const cabenEnElHorno = disponibles >= unidadesPedidas; 
+
+                  const botonDeshabilitado = !cabenEnElHorno || bloqueadoPorPaella;
 
                   return (
                     <button
                       key={f.id}
                       type="button"
-                      disabled={!cabenEnElHorno} // Desactiva el botón si no caben
+                      disabled={botonDeshabilitado} 
                       onClick={() => setHoraRecogida(h)}
                       className={`py-2 rounded-xl flex flex-col items-center justify-center transition-all border-2 
-                        ${!cabenEnElHorno 
+                        ${botonDeshabilitado 
                           ? 'bg-slate-50 border-slate-100 opacity-50 cursor-not-allowed grayscale' 
                           : horaRecogida === h 
                             ? 'bg-orange-600 border-orange-600 text-white shadow-md' 
@@ -279,8 +293,9 @@ export default function ClienteMenu() {
                     >
                       <span className="text-sm font-black font-mono">{h}</span>
                       
-                      {/* ETIQUETAS DE STOCK VISUALES */}
-                      {!cabenEnElHorno ? (
+                      {bloqueadoPorPaella ? (
+                        <span className="text-[8px] font-black text-rose-500 tracking-wider">MÍN 2H (PAELLA)</span>
+                      ) : !cabenEnElHorno ? (
                         <span className="text-[9px] font-black text-rose-500 tracking-wider">COMPLETO</span>
                       ) : disponibles <= 5 ? (
                         <span className={`text-[9px] font-black tracking-wider ${horaRecogida === h ? 'text-orange-200' : 'text-orange-500'}`}>Quedan {disponibles}</span>
@@ -311,10 +326,8 @@ export default function ClienteMenu() {
             </p>
           )}
         </section>
-
       </main>
 
-      {/* BOTÓN FLOTANTE INFERIOR */}
       {totalArticulos > 0 && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-orange-100 shadow-xl flex justify-center z-40">
           <button
@@ -327,7 +340,6 @@ export default function ClienteMenu() {
           </button>
         </div>
       )}
-
     </div>
   );
 }

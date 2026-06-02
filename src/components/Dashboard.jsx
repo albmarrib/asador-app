@@ -18,6 +18,8 @@ export default function Dashboard() {
   const [modalCargaAbierto, setModalCargaAbierto] = useState(false);
   const [modalProduccionAbierto, setModalProduccionAbierto] = useState(false); 
   const [modalVentaDirectaAbierto, setModalVentaDirectaAbierto] = useState(false); 
+  const [pedidoSeleccionado, setPedidoSeleccionado] = useState(null); // Para el nuevo modal de gestión
+
 
   // ESTADOS FORMULARIO RESERVA MANUAL
   const [nombreCliente, setNombreCliente] = useState('');
@@ -123,6 +125,13 @@ export default function Dashboard() {
 
   // --- CONTROLES OPERATIVOS ---
   const handleEntregar = async (id) => await updateDoc(doc(db, 'pedidos', id), { entregado: true });
+   const handleCobrarPedido = async (id) => {
+    await updateDoc(doc(db, 'pedidos', id), { 
+      entregado: true,
+      cobrado: true // Añadimos marca de cobrado por si en el futuro quieres hacer caja
+    });
+    setPedidoSeleccionado(null); // Cierra el modal
+  };
   const handleAnularPedido = async (id) => await deleteDoc(doc(db, 'pedidos', id));
   const handleReubicarPedido = async (id, nuevaHora) => await updateDoc(doc(db, 'pedidos', id), { hora: nuevaHora });
 
@@ -428,9 +437,9 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {vista === 'mostrador' && franjas.length > 0 && (
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-          <section className="xl:col-span-4 bg-white rounded-2xl p-5 shadow-sm border border-orange-100">
+      {vista === 'mostrador' && franjas.length > 0 && (   
+     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+     <section className="bg-white rounded-2xl p-5 shadow-sm border border-orange-100">
             <h2 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">📊 Estado de Carga</h2>
             <div className="space-y-4">
               {franjas.map((f) => {
@@ -471,18 +480,18 @@ export default function Dashboard() {
             </div>
           </section>
 
-          <section className="xl:col-span-8 bg-white rounded-2xl p-5 shadow-sm border border-orange-100">
+<section className="bg-white rounded-2xl p-5 shadow-sm border border-orange-100">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 border-b-2 border-slate-100 pb-4">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-xs font-black text-slate-400 uppercase mr-1">Filtrar:</span>
-                <button onClick={() => setFiltroHora('Todos')} className={`px-4 py-2 rounded-xl text-xs font-black uppercase border-2 transition-all cursor-pointer ${filtroHora === 'Todos' ? 'bg-slate-800 text-white border-slate-800' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}>Todos</button>
-                {franjas.map(f => {
-                  const h = f.hora.split(' ')[0];
-                  return (
-                    <button key={f.id} onClick={() => setFiltroHora(h)} className={`px-4 py-2 rounded-xl text-xs font-black border-2 transition-all cursor-pointer ${filtroHora === h ? 'bg-orange-600 text-white border-orange-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}>{h}</button>
-                  );
-                })}
-              </div>
+        <div className="flex flex-wrap gap-2 w-full">
+          <button onClick={() => setFiltroHora('Todos')} className={`flex-1 py-3 rounded-xl text-xs font-black uppercase border-2 transition-all cursor-pointer ${filtroHora === 'Todos' ? 'bg-slate-800 text-white border-slate-800' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}>Todos</button>
+          {franjas.map(f => {
+            const h = f.hora.split(' ')[0];
+            return (
+              <button key={f.id} onClick={() => setFiltroHora(h)} className={`flex-1 py-3 rounded-xl text-xs font-black border-2 transition-all cursor-pointer ${filtroHora === h ? 'bg-orange-600 text-white border-orange-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}>{h}</button>
+            );
+          })}
+        </div>
+
               <div className="w-full md:w-64 shrink-0">
                 <input type="text" placeholder="🔍 Buscar nombre..." value={busqueda} onChange={(e) => setBusqueda(e.target.value.toUpperCase())} className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-700 uppercase focus:outline-none focus:border-orange-500 placeholder:text-slate-400" />
               </div>
@@ -496,7 +505,7 @@ export default function Dashboard() {
                 .filter(p => filtroHora === 'Todos' ? true : p.hora === filtroHora)
                 .filter(p => busqueda === '' ? true : p.cliente.includes(busqueda))
                 .map((p) => (
-                  <div key={p.id} className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${p.entregado ? 'bg-slate-50 border-slate-200 opacity-55' : 'bg-amber-50/40 border-amber-200 shadow-sm'}`}>
+<div key={p.id} onClick={() => { if(p.cliente !== 'VENTA DIRECTA') setPedidoSeleccionado(p) }} className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${p.cliente === 'VENTA DIRECTA' ? 'cursor-default' : 'cursor-pointer hover:scale-[1.01]'} ${p.entregado ? 'bg-slate-50 border-slate-200 opacity-55' : 'bg-amber-50/40 border-amber-200 shadow-sm'}`}>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-mono font-black bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">{p.origen === 'QR' ? '📲 WEB' : '📞 TIENDA'}</span>
@@ -738,7 +747,19 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <div className="shrink-0 mt-6 pt-4 border-t-4 border-slate-100">
-                  <button type="button" onClick={handleEjecutarVentaDirecta} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-5 rounded-2xl uppercase text-3xl shadow-xl border-b-8 border-emerald-800 cursor-pointer">🪙 Confirmar Venta</button>
+{(() => {
+  const totalTPV = Object.entries(vdCarritoExtras).reduce((sum, [prodId, cant]) => {
+    const prod = productos.find(p => p.id === prodId);
+    return sum + (prod ? prod.precio * cant : 0);
+  }, 0);
+  return (
+    <button type="button" onClick={handleEjecutarVentaDirecta} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-5 rounded-2xl uppercase text-3xl shadow-xl border-b-8 border-emerald-800 cursor-pointer flex justify-center items-center gap-4">
+      <span>🪙 Confirmar Venta</span>
+      {totalTPV > 0 && <span className="bg-white text-emerald-700 px-4 py-1 rounded-xl">{totalTPV.toFixed(2)}€</span>}
+    </button>
+  );
+})()}
+
                 </div>
               </div>
             </div>
@@ -806,13 +827,75 @@ export default function Dashboard() {
                 </div>
                 <div className="shrink-0 mt-4 pt-4 border-t-4 border-slate-100">
                   {errorValidacion && <p className="text-rose-600 font-black text-center text-lg bg-rose-50 p-3 rounded-xl border-4 border-rose-200 mb-3">{errorValidacion}</p>}
-                  <button type="button" onClick={handleGuardarPedido} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-5 rounded-2xl uppercase text-3xl shadow-xl transition-colors border-b-8 border-emerald-800 cursor-pointer">💾 Confirmar Reserva</button>
-                </div>
-              </div>
-            </div>
-          )}
+<button type="button" onClick={handleGuardarPedido} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-5 rounded-2xl uppercase text-3xl shadow-xl transition-colors border-b-8 border-emerald-800 cursor-pointer">💾 Confirmar Reserva</button>
+</div>
+</div>
+</div>
+)}
+</div>
+)}
+
+{/* MODAL GIGANTE 5: GESTIÓN DE PEDIDO INDIVIDUAL */}
+{pedidoSeleccionado && (
+  <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-4 lg:p-6 z-50 overflow-hidden">
+    <div className="bg-white rounded-[2rem] w-full max-w-3xl p-8 shadow-2xl border-4 border-orange-500 flex flex-col gap-6">
+      
+      <div className="flex justify-between items-start border-b-4 border-slate-100 pb-6">
+        <div>
+          <h3 className="text-4xl lg:text-5xl font-black text-slate-800 uppercase tracking-tight">{pedidoSeleccionado.cliente}</h3>
+          <span className="text-lg font-black text-orange-600 bg-orange-50 px-4 py-2 rounded-xl border-2 border-orange-200 font-mono mt-3 inline-block">
+            ⏰ HORA ACTUAL: {pedidoSeleccionado.hora}
+          </span>
         </div>
-      )}
+        <button onClick={() => setPedidoSeleccionado(null)} className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-black text-xl px-6 py-4 rounded-2xl cursor-pointer transition-all">✕ CERRAR</button>
+      </div>
+      
+      <div className="bg-slate-50 p-6 rounded-2xl border-4 border-slate-100">
+        <span className="block text-sm font-black text-slate-400 uppercase tracking-widest mb-2">Detalle de la comanda:</span>
+        <div className="flex justify-between items-center mt-2">
+          <p className="text-2xl font-black text-slate-700 font-mono leading-relaxed">
+            {pedidoSeleccionado.detalle.includes('|') ? pedidoSeleccionado.detalle.split('|')[1].trim() : pedidoSeleccionado.detalle}
+          </p>
+          <div className="bg-emerald-100 border-4 border-emerald-500 text-emerald-800 text-4xl font-black px-6 py-4 rounded-2xl ml-4 whitespace-nowrap shadow-inner">
+            {(() => {
+              let total = 0;
+              const texto = pedidoSeleccionado.detalle.includes('|') ? pedidoSeleccionado.detalle.split('|')[1] : pedidoSeleccionado.detalle;
+              texto.split('+').forEach(parte => {
+                const match = parte.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(.*)/i);
+                if (match) {
+                  const prod = productos.find(p => p.nombre.toUpperCase() === match[2].trim().toUpperCase());
+                  if (prod) total += (parseFloat(match[1]) * prod.precio);
+                }
+              });
+              return total.toFixed(2) + ' €';
+            })()}
+          </div>
+        </div>
+
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 mt-2">
+        {!pedidoSeleccionado.entregado && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <button onClick={() => { handleEntregar(pedidoSeleccionado.id); setPedidoSeleccionado(null); }} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black py-6 rounded-2xl uppercase text-2xl shadow-xl border-b-8 border-emerald-800 cursor-pointer active:scale-95 transition-all">✓ ENTREGAR</button>
+            <button onClick={() => { handleCobrarPedido(pedidoSeleccionado.id); setPedidoSeleccionado(null); }} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black py-6 rounded-2xl uppercase text-2xl shadow-xl border-b-8 border-indigo-800 cursor-pointer active:scale-95 transition-all">🪙 COBRAR Y DAR</button>
+          </div>
+        )}
+        
+        <div className="bg-slate-100 p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 border-2 border-slate-200">
+          <span className="font-black text-slate-600 uppercase text-lg">↪️ Mover a otra hora:</span>
+          <select onChange={(e) => { handleReubicarPedido(pedidoSeleccionado.id, e.target.value); setPedidoSeleccionado(null); }} className="bg-white border-4 border-slate-300 text-slate-800 font-black rounded-xl px-6 py-4 text-xl focus:outline-none cursor-pointer w-full sm:w-auto" defaultValue="">
+            <option value="" disabled>Seleccionar tramo...</option>
+            {franjas.map(fr => <option key={fr.id} value={fr.hora.split(' ')[0]}>{fr.hora.split(' ')[0]}</option>)}
+          </select>
+        </div>
+
+        <button onClick={() => { if(window.confirm("¿Estás seguro de anular y borrar este pedido para siempre?")) { handleAnularPedido(pedidoSeleccionado.id); setPedidoSeleccionado(null); } }} className="bg-rose-100 hover:bg-rose-200 text-rose-700 border-4 border-rose-200 font-black py-5 rounded-2xl uppercase text-xl cursor-pointer mt-2 transition-all">❌ ANULAR Y BORRAR PEDIDO</button>
+      </div>
     </div>
-  );
+  </div>
+)}
+
+</div>
+);
 }
