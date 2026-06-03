@@ -67,48 +67,62 @@ export default function ClienteMenu() {
     return unidades;
   };
 
-  // Verifica si el carrito supera el stock o hay que deseleccionar la hora
-  useEffect(() => {
-    if (horaRecogida) {
-      const franjaActual = franjas.find(f => f.hora.split(' ')[0] === horaRecogida);
-      if (franjaActual) {
-        const reservados = obtenerReservadosPorFranja(horaRecogida);
-        const disponibles = Math.max(franjaActual.max - reservados, 0);
-        if (calcularUnidadesConsumidas() > disponibles) {
-          setHoraRecogida(''); 
-        }
-      }
-    }
-  }, [carrito, franjas, pedidos, horaRecogida]);
+ // NUEVO: Vigilante de la Paella (Lo subimos para que el useEffect lo pueda usar)
+const tienePaella = Object.entries(carrito).some(([id, cant]) => {
+const p = productos.find(x => x.id === id);
+return p && p.nombre.toUpperCase().includes('PAELLA') && cant > 0;
+});
 
-  const handleModificarCarrito = (id, incremento) => {
-    setCarrito(prev => {
-      const actual = prev[id] || 0;
-      const nueva = Math.max(actual + incremento, 0);
-      if (nueva === 0) {
-        const { [id]: _, ...resto } = prev;
-        return resto;
-      }
-      return { ...prev, [id]: nueva };
-    });
-  };
+// Verifica si el carrito supera el stock o hay que deseleccionar la hora por la paella
+useEffect(() => {
+if (horaRecogida) {
+const franjaActual = franjas.find(f => f.hora.split(' ')[0] === horaRecogida);
+if (franjaActual) {
+const reservados = obtenerReservadosPorFranja(horaRecogida);
+const disponibles = Math.max(franjaActual.max - reservados, 0);
 
-  const calcularTotal = () => {
-    let total = 0;
-    Object.entries(carrito).forEach(([id, cant]) => {
-      const p = productos.find(x => x.id === id);
-      if (p) total += (p.precio * cant);
-    });
-    return total;
-  };
+let bloqueadoPorPaella = false;
+if (tienePaella) {
+const ahora = new Date();
+const [horas, minutos] = horaRecogida.split(':');
+const horaFranja = new Date();
+horaFranja.setHours(parseInt(horas), parseInt(minutos), 0, 0);
+if ((horaFranja - ahora) < 120 * 60 * 1000) {
+bloqueadoPorPaella = true;
+}
+}
 
-  const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
+// Si excede el stock O añadió una paella tarde, le quitamos la hora seleccionada
+if (calcularUnidadesConsumidas() > disponibles || bloqueadoPorPaella) {
+setHoraRecogida(''); 
+}
+}
+}
+}, [carrito, franjas, pedidos, horaRecogida, tienePaella]);
 
-  // NUEVO: Vigilante de la Paella
-  const tienePaella = Object.entries(carrito).some(([id, cant]) => {
-    const p = productos.find(x => x.id === id);
-    return p && p.nombre.includes('PAELLA') && cant > 0;
-  });
+const handleModificarCarrito = (id, incremento) => {
+setCarrito(prev => {
+const actual = prev[id] || 0;
+const nueva = Math.max(actual + incremento, 0);
+if (nueva === 0) {
+const { [id]: _, ...resto } = prev;
+return resto;
+}
+return { ...prev, [id]: nueva };
+});
+};
+
+const calcularTotal = () => {
+let total = 0;
+Object.entries(carrito).forEach(([id, cant]) => {
+const p = productos.find(x => x.id === id);
+if (p) total += (p.precio * cant);
+});
+return total;
+};
+
+const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
+ 
 
   // --- ENVIAR A FIREBASE ---
   const handleEnviarReserva = async (e) => {
@@ -139,16 +153,31 @@ export default function ClienteMenu() {
     // Así la tablet del asador podrá leer este número al instante y descontarlo del stock.
     const detalleTexto = `${unidadesConsumidas} | ` + lineasTicket.join(' + ');
 
-    try {
+      // BLOQUEO FINAL DE SEGURIDAD PARA LA PAELLA
+      if (tienePaella) {
+      const ahora = new Date();
+      const [horas, minutos] = horaRecogida.split(':');
+      const fechaReserva = new Date();
+      fechaReserva.setHours(parseInt(horas), parseInt(minutos), 0, 0);
+      if (fechaReserva.getTime() - ahora.getTime() < 120 * 60 * 1000) {
+      setErrorFormulario('⚠️ LA PAELLA REQUIERE MÍNIMO 2 HORAS DE ANTELACIÓN.');
+      return;
+      }
+      }
+
+      try {
       const docRef = await addDoc(collection(db, 'pedidos'), {
-        local: LOCAL_ID,
-        cliente: nombreCliente.trim().toUpperCase(),
-        hora: horaRecogida,
-        detalle: detalleTexto,
-        entregado: false,
-        origen: 'QR', 
-        creadoEn: new Date()
+      local: LOCAL_ID,
+      cliente: nombreCliente.trim().toUpperCase(),
+      hora: horaRecogida,
+      detalle: detalleTexto,
+      entregado: false,
+      cobrado: false, // OBLIGATORIO PARA QUE EL MOSTRADOR LO SEPA
+      fianza: tienePaella ? 'pendiente' : null, // MARCAZO DE LA SARTÉN
+      origen: 'QR', 
+      creadoEn: new Date()
       });
+
 
       setTicketId(docRef.id.slice(-4).toUpperCase()); 
       setPedidoConfirmado(true);
@@ -193,10 +222,16 @@ export default function ClienteMenu() {
                 );
               })}
             </div>
-            <div className="flex justify-between border-t border-slate-200 pt-2 font-black text-slate-800 text-base">
-              <span>TOTAL A PAGAR:</span>
-              <span>{calcularTotal().toFixed(2)}€</span>
-            </div>
+<div className="flex flex-col border-t border-slate-200 pt-2 font-black text-slate-800 text-base">
+  <div className="flex justify-between w-full">
+    <span>TOTAL A PAGAR:</span>
+    <span>{calcularTotal().toFixed(2)}€</span>
+  </div>
+  {tienePaella && (
+    <span className="text-[10px] text-amber-600 font-bold mt-1 text-right italic">+ 20.00€ FIANZA (A pagar al recoger)</span>
+  )}
+</div>
+
           </div>
           <p className="text-xs text-slate-400 font-bold bg-slate-100 p-3 rounded-xl">Paga cómodamente con tarjeta o efectivo al recogerlo en el mostrador. ¡Gracias!</p>
           <button onClick={() => window.location.reload()} className="w-full bg-slate-800 text-white font-bold py-3 rounded-xl text-xs uppercase cursor-pointer">Hacer otro pedido</button>
@@ -244,10 +279,24 @@ export default function ClienteMenu() {
               </div>
             );
           })}
-        </section>
+            </section>
 
-        <section className="bg-white rounded-2xl p-5 border border-orange-100/60 shadow-sm space-y-4">
-          <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">📋 Confirmar recogida</h2>
+              {tienePaella && (
+              <div className="bg-amber-100 border-2 border-amber-300 rounded-2xl p-4 mb-4 shadow-sm relative overflow-hidden">
+              <div className="absolute top-0 right-0 bg-amber-500 text-white text-[9px] font-black uppercase px-2 py-1 rounded-bl-lg tracking-widest">ATENCIÓN</div>
+              <h3 className="text-amber-900 font-black text-sm uppercase flex items-center gap-2 mb-1">
+              <span>🥘</span> FIANZA DE PAELLERA
+              </h3>
+              <p className="text-amber-800 text-xs font-bold leading-relaxed">
+              Al recoger tu pedido, se cobrarán <span className="font-black text-amber-900 text-sm bg-amber-200 px-1 rounded">20€ extra</span> en concepto de fianza por la sartén. Te los devolveremos íntegros al retornarla.
+              </p>
+              </div>
+              )}
+
+
+            <section className="bg-white rounded-2xl p-5 border border-orange-100/60 shadow-sm space-y-4">
+            <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-2">📋 Confirmar recogida</h2>
+
           {franjas.length === 0 ? (
             <p className="text-rose-500 font-bold text-sm bg-rose-50 p-3 rounded-lg text-center">
               Aún no hay horas disponibles para hoy.
@@ -279,30 +328,28 @@ export default function ClienteMenu() {
                   const botonDeshabilitado = !cabenEnElHorno || bloqueadoPorPaella;
 
                   return (
-                    <button
+                  <button
                       key={f.id}
                       type="button"
                       disabled={botonDeshabilitado} 
                       onClick={() => setHoraRecogida(h)}
-                      className={`py-2 rounded-xl flex flex-col items-center justify-center transition-all border-2 
-                        ${botonDeshabilitado 
-                          ? 'bg-slate-50 border-slate-100 opacity-50 cursor-not-allowed grayscale' 
-                          : horaRecogida === h 
-                            ? 'bg-orange-600 border-orange-600 text-white shadow-md' 
-                            : 'bg-white border-slate-200 text-slate-700 hover:border-orange-300'}`}
-                    >
+                      className={`py-3 rounded-xl flex flex-col items-center justify-center transition-all border-2 
+                      ${botonDeshabilitado 
+                      ? 'bg-slate-50 border-slate-100 opacity-50 cursor-not-allowed grayscale' 
+                      : horaRecogida === h 
+                      ? 'bg-orange-600 border-orange-600 text-white shadow-md' 
+                      : 'bg-white border-slate-200 text-slate-700 hover:border-orange-300'}`}
+                      >
                       <span className="text-sm font-black font-mono">{h}</span>
-                      
                       {bloqueadoPorPaella ? (
-                        <span className="text-[8px] font-black text-rose-500 tracking-wider">MÍN 2H (PAELLA)</span>
+                      <span className="text-[8px] font-black text-rose-500 tracking-wider uppercase">Paella: +2h</span>
                       ) : !cabenEnElHorno ? (
-                        <span className="text-[9px] font-black text-rose-500 tracking-wider">COMPLETO</span>
-                      ) : disponibles <= 5 ? (
-                        <span className={`text-[9px] font-black tracking-wider ${horaRecogida === h ? 'text-orange-200' : 'text-orange-500'}`}>Quedan {disponibles}</span>
+                      <span className="text-[9px] font-black text-rose-500 tracking-wider uppercase">Completo</span>
                       ) : (
-                        <span className={`text-[9px] font-bold tracking-wider ${horaRecogida === h ? 'text-orange-200' : 'text-slate-400'}`}>Libre</span>
+                      <span className={`text-[9px] font-black tracking-wider ${horaRecogida === h ? 'text-orange-200' : 'text-emerald-600'}`}>Disponible</span>
                       )}
-                    </button>
+                      </button>
+                        
                   );
                 })}
               </div>
@@ -330,14 +377,18 @@ export default function ClienteMenu() {
 
       {totalArticulos > 0 && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-orange-100 shadow-xl flex justify-center z-40">
-          <button
-            onClick={handleEnviarReserva}
-            disabled={franjas.length === 0}
-            className="w-full max-w-md bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black py-4 px-5 rounded-2xl shadow-lg flex justify-between items-center text-sm uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer"
-          >
-            <span>🛒 Confirmar ({totalArticulos})</span>
-            <span className="bg-emerald-800/40 px-3 py-1 rounded-lg font-mono font-black">{calcularTotal().toFixed(2)}€</span>
-          </button>
+<button
+  onClick={handleEnviarReserva}
+  disabled={franjas.length === 0}
+  className="w-full max-w-md bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black py-4 px-5 rounded-2xl shadow-lg flex justify-between items-center text-sm uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer"
+>
+  <span>🛒 Confirmar ({totalArticulos})</span>
+  <div className="flex flex-col items-end">
+    <span className="bg-emerald-800/40 px-3 py-1 rounded-lg font-mono font-black">{calcularTotal().toFixed(2)}€</span>
+    {tienePaella && <span className="text-[9px] text-emerald-200 mt-0.5 font-bold">+ 20€ Fianza</span>}
+  </div>
+</button>
+
         </div>
       )}
     </div>

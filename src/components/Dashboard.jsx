@@ -71,19 +71,53 @@ const [franjaDetalleSeleccionada, setFranjaDetalleSeleccionada] = useState(null)
     };
   }, []);
 
-  // --- MOTORES MATEMÁTICOS DE PROCESAMIENTO ---
+    // --- MOTORES MATEMÁTICOS DE PROCESAMIENTO ---
   const extraerUnidades = (detalleTexto) => {
     if (!detalleTexto) return 0;
-    const detalleStr = String(detalleTexto);
-    if (detalleStr.includes('|')) return parseFloat(detalleStr.split('|')[0]) || 0;
-    return parseFloat(detalleStr) || 1;
+    const texto = String(detalleTexto).includes('|') ? String(detalleTexto).split('|')[1] : String(detalleTexto);
+    let pollos = 0;
+    texto.split('+').forEach(parte => {
+      const match = parte.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(.*)/i);
+      if (match) {
+        const cant = parseFloat(match[1]);
+        const nombre = match[2].trim().toUpperCase();
+        if (nombre.includes('POLLO')) {
+          const prodInfo = productos.find(p => p.nombre.toUpperCase() === nombre);
+          if (prodInfo && prodInfo.controlaStock) pollos += (cant * parseFloat(prodInfo.consumeUnidades));
+          else pollos += nombre.includes('MEDIO') ? (cant * 0.5) : cant;
+        }
+      }
+    });
+    return pollos;
+  };
+
+  const chequearSobrecargaOtros = (franja, pedidosFranja) => {
+    const limitePatatas = Number(franja.patatas || franja.maxPatatas || (franja.capacidad && franja.capacidad.patatas) || 0);
+    const limiteButifarras = Number(franja.butifarras || franja.maxButifarras || (franja.capacidad && franja.capacidad.butifarras) || 0);
+    let consumos = { patatas: 0, butifarras: 0 };
+    
+    pedidosFranja.forEach(p => {
+      if (p.historico) return; // IGNORAMOS LA COMIDA DE DEUDAS VIEJAS
+      const texto = String(p.detalle).includes('|') ? String(p.detalle).split('|')[1] : String(p.detalle);
+      texto.split('+').forEach(parte => {
+        const match = parte.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(.*)/i);
+        if (match) {
+          const cant = parseFloat(match[1]);
+          const nombre = match[2].trim().toUpperCase();
+          if (nombre.includes('PATATA')) consumos.patatas += cant;
+          if (nombre.includes('BUTI')) consumos.butifarras += cant; 
+        }
+      });
+    });
+    
+    if ((limitePatatas > 0 && consumos.patatas > limitePatatas) || (limiteButifarras > 0 && consumos.butifarras > limiteButifarras)) return true;
+    return false;
   };
 
   const obtenerReservadosPorFranja = (horaFranja) => {
     const horaInicio = horaFranja.split(' ')[0];
-    // Sumamos TODO lo que se ha vendido o reservado para esa hora (tanto pendiente como ya entregado)
     return pedidos
-      .filter(p => p.hora === horaInicio)
+      .filter(p => p.hora === horaInicio && !p.historico) // IGNORAMOS COMIDA VIEJA
       .reduce((sum, p) => sum + extraerUnidades(p.detalle), 0); 
   };
 
@@ -95,6 +129,7 @@ const [franjaDetalleSeleccionada, setFranjaDetalleSeleccionada] = useState(null)
   const obtenerComandaGlobal = () => {
     const totales = {};
     pedidos.forEach(p => {
+      if (p.historico) return; // NO CUENTA EN LA PRODUCCIÓN DE HOY
       const texto = p.detalle.includes('|') ? p.detalle.split('|')[1] : p.detalle;
       const partes = String(texto).split('+');
       
@@ -115,6 +150,7 @@ const [franjaDetalleSeleccionada, setFranjaDetalleSeleccionada] = useState(null)
     return totales;
   };
 
+
   const capacidadTotal = franjas.reduce((acc, f) => acc + f.max, 0);
   const totalReservados = pedidos.filter(p => !p.entregado).reduce((sum, p) => sum + extraerUnidades(p.detalle), 0);
   const totalDisponibles = Math.max(capacidadTotal - totalReservados, 0);
@@ -128,17 +164,27 @@ const [franjaDetalleSeleccionada, setFranjaDetalleSeleccionada] = useState(null)
     }) || franjas[0];
   };
 
-  // --- CONTROLES OPERATIVOS ---
+   // --- CONTROLES OPERATIVOS ---
   const handleEntregar = async (id) => await updateDoc(doc(db, 'pedidos', id), { entregado: true });
-   const handleCobrarPedido = async (id) => {
-    await updateDoc(doc(db, 'pedidos', id), { 
-      entregado: true,
-      cobrado: true // Añadimos marca de cobrado por si en el futuro quieres hacer caja
-    });
-    setPedidoSeleccionado(null); // Cierra el modal
+  
+  const handleCobrarPedido = async (id, tipoFianza = null) => {
+    const actualizacion = { entregado: true, cobrado: true };
+    // Si la función recibe el estado de la fianza ('retenida' o 'descartada'), lo actualiza
+    if (tipoFianza) actualizacion.fianza = tipoFianza;
+    
+    await updateDoc(doc(db, 'pedidos', id), actualizacion);
+    setPedidoSeleccionado(null); 
   };
+
+  const handleDevolverFianza = async (id) => {
+    // Solo marca la fianza como devuelta y cierra la pantalla
+    await updateDoc(doc(db, 'pedidos', id), { fianza: 'devuelta' });
+    setPedidoSeleccionado(null);
+  };
+
   const handleAnularPedido = async (id) => await deleteDoc(doc(db, 'pedidos', id));
   const handleReubicarPedido = async (id, nuevaHora) => await updateDoc(doc(db, 'pedidos', id), { hora: nuevaHora });
+ 
 
   // --- NUEVA OPERATIVA DE CARGA INTELIGENTE ---
   const handleCargarEstandarHornos = async () => {
@@ -198,19 +244,37 @@ const [franjaDetalleSeleccionada, setFranjaDetalleSeleccionada] = useState(null)
     await updateDoc(doc(db, 'franjas', franjaId), { estandar: nuevoEstandar });
   };
 
-  // --- CIERRE DE CAJA (CERO OPERATIVO REAL) ---
+    // --- CIERRE DE CAJA (CERO OPERATIVO REAL) ---
   const handleLimpiarDia = async () => {
-    if (window.confirm("🚨 ¿Seguro que quieres CERRAR EL DÍA? \n\nEsto ocultará los pedidos y vaciará todos los hornos vivos a 0 real para mañana.")) {
-      for (const p of pedidos) await updateDoc(doc(db, 'pedidos', p.id), { archivado: true });
+    if (window.confirm("🚨 ¿Seguro que quieres CERRAR EL DÍA? \n\n• Los pedidos NO RECOGIDOS se registrarán como PÉRDIDA y desaparecerán.\n• Las deudas y sartenes se mantendrán, pero su comida no contará para mañana.\n• Los hornos se vaciarán a 0.")) {
+      for (const p of pedidos) {
+        const esVentaDirecta = p.cliente === 'VENTA DIRECTA';
+        const estaCobrado = p.cobrado || esVentaDirecta;
+        const tieneFianzaRetenida = p.fianza === 'retenida';
+        
+        // CASO 1: Pérdida (No recogido) -> Se archiva y desaparece del todo
+        if (!p.entregado) {
+          await updateDoc(doc(db, 'pedidos', p.id), { archivado: true, estadoCierre: 'perdida_no_recogido' });
+        } 
+        // CASO 2: Completado limpio -> Se archiva y desaparece del todo
+        else if (p.entregado && estaCobrado && !tieneFianzaRetenida) {
+          await updateDoc(doc(db, 'pedidos', p.id), { archivado: true, estadoCierre: 'completado' });
+        } 
+        // CASO 3: Deudas y Sartenes -> Sobreviven, pero las marcamos como de días pasados
+        else {
+          await updateDoc(doc(db, 'pedidos', p.id), { historico: true });
+        }
+      }
       for (const f of franjas) {
         await updateDoc(doc(db, 'franjas', f.id), {
           max: 0,
           capacidad: { pollos: 0, patatas: 0, butifarras: 0 }
         });
       }
-      alert("🧹 Caja cerrada de forma limpia. Todo el stock vivo se ha reseteado.");
+      alert("🧹 Caja cerrada. Las pérdidas se han registrado y el mostrador está listo para mañana.");
     }
   };
+
 
   // --- FORMULARIOS DE CARRITO ---
   const handleAbrirNuevaReserva = () => {
@@ -233,22 +297,38 @@ const [franjaDetalleSeleccionada, setFranjaDetalleSeleccionada] = useState(null)
     });
   };
 
-  const handleGuardarPedido = async () => {
+const handleGuardarPedido = async () => {
   if (!nombreCliente.trim()) { setErrorValidacion('⚠️ El nombre del cliente es obligatorio.'); return; }
   if (!horaSeleccionada) { setErrorValidacion('⚠️ Necesitas configurar al menos una franja horaria.'); return; }
 
   const lineasTicket = [];
   let stockConsumido = 0;
+  let llevaPaella = false;
 
   Object.entries(carritoExtras).forEach(([prodId, cant]) => {
     const prodInfo = productos.find(p => p.id === prodId);
     if (prodInfo) {
       lineasTicket.push(`${cant}x ${prodInfo.nombre}`);
       if (prodInfo.controlaStock) stockConsumido += (parseFloat(prodInfo.consumeUnidades) * cant);
+      if (prodInfo.nombre.toUpperCase() === 'PAELLA' && cant > 0) llevaPaella = true;
     }
   });
 
   if (lineasTicket.length === 0) { setErrorValidacion('⚠️ El pedido no puede estar vacío. Añade algún producto.'); return; }
+
+  // REGLA DE LAS 2 HORAS PARA LA PAELLA
+  if (llevaPaella) {
+    const ahora = new Date();
+    const [horaSel, minSel] = horaSeleccionada.split(':').map(Number);
+    const fechaReserva = new Date();
+    fechaReserva.setHours(horaSel, minSel, 0, 0);
+
+    // Diferencia en milisegundos (2 horas)
+    if (fechaReserva.getTime() - ahora.getTime() < 2 * 60 * 60 * 1000) {
+      setErrorValidacion('⚠️ LA PAELLA REQUIERE MÍNIMO 2 HORAS DE ANTELACIÓN PARA PODER COCINARLA.');
+      return;
+    }
+  }
   
   const detalleTexto = `${stockConsumido} | ` + lineasTicket.join(' + ');
 
@@ -259,11 +339,13 @@ const [franjaDetalleSeleccionada, setFranjaDetalleSeleccionada] = useState(null)
     detalle: detalleTexto, 
     entregado: false, 
     cobrado: false,
+    fianza: llevaPaella ? 'pendiente' : null,
     origen: 'Mostrador/Teléfono', 
     creadoEn: new Date()
   });
   setModalAbierto(false);
 };
+
 
   // --- TPV VENTA DIRECTA ---
   const handleModificarVDExtra = (productoId, incremento) => {
@@ -401,11 +483,10 @@ const [franjaDetalleSeleccionada, setFranjaDetalleSeleccionada] = useState(null)
     return nomA.localeCompare(nomB);
   });
 
-
   return (
-    <div className="min-h-screen bg-orange-50/40 text-slate-800 p-4 md:p-6 font-sans antialiased">
-      <header className="sticky top-2 z-40 bg-white/95 backdrop-blur-md rounded-2xl p-6 shadow-md border border-orange-100 mb-6 relative overflow-hidden">
-        <div className="absolute top-0 right-0 bg-emerald-500 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl shadow-sm flex items-center gap-1.5">
+<div className="fixed inset-0 overflow-hidden overscroll-none flex flex-col bg-orange-50/40 text-slate-800 p-4 md:p-6 font-sans antialiased">
+<header className="shrink-0 z-40 bg-white/95 backdrop-blur-md rounded-2xl p-6 shadow-md border border-orange-100 mb-4 relative overflow-hidden">
+       <div className="absolute top-0 right-0 bg-emerald-500 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl shadow-sm flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span> Nube Conectada
         </div>
 
@@ -449,109 +530,158 @@ const [franjaDetalleSeleccionada, setFranjaDetalleSeleccionada] = useState(null)
         </div>
       </header>
 
-      {vista === 'mostrador' && franjas.length > 0 && (   
-     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-     <section className="bg-white rounded-2xl p-5 shadow-sm border border-orange-100">
-            <h2 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4">📊 Estado de Carga</h2>
-            <div className="space-y-4">
-              {franjas.map((f) => {
-                const reservados = obtenerReservadosPorFranja(f.hora);
-                const faltaPollo = calcularAlertaFranja(f);
-                const porcentaje = f.max > 0 ? (reservados / f.max) * 100 : 0;
-                let colorBarra = "bg-emerald-500";
-                let estiloFila = "bg-slate-50/60 border-slate-100";
+       {vista === 'mostrador' && franjas.length > 0 && (   
+     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 flex-1 min-h-0">
+     <section className="bg-white rounded-2xl p-5 shadow-sm border border-orange-100 flex flex-col overflow-hidden">
+            <h2 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4 shrink-0">📊 Estado de Carga</h2>
+            <div className="space-y-4 overflow-y-auto pr-2 flex-1 scrollbar-hide">
+ {franjas.map((f) => {
 
-                if (faltaPollo > 0) {
-                  colorBarra = "bg-rose-500 animate-pulse";
-                  estiloFila = "bg-rose-50 border-rose-200 ring-2 ring-rose-500/10";
-                } else if (porcentaje >= 85) {
-                  colorBarra = "bg-amber-500";
-                  estiloFila = "bg-amber-50/50 border-amber-200";
-                }
+const reservados = obtenerReservadosPorFranja(f.hora);
+const faltaPollo = calcularAlertaFranja(f);
+const porcentaje = f.max > 0 ? (reservados / f.max) * 100 : 0;
 
-                return (
+// RADAR DE OTROS PRODUCTOS: Comprobamos si patatas o butifarras se pasan
+const horaInicio = f.hora.split(' ')[0]; // Extraemos solo el "13:00" para que coincida con los pedidos
+const pedidosFranja = pedidosProcesados.filter(p => p.hora === horaInicio && p.cliente !== 'VENTA DIRECTA');
+const alertaSecundaria = chequearSobrecargaOtros(f, pedidosFranja);
+
+
+let colorBarra = "bg-emerald-500";
+let estiloFila = "bg-slate-50/60 border-slate-100";
+
+if (faltaPollo > 0) {
+colorBarra = "bg-rose-500 animate-pulse";
+estiloFila = "bg-rose-50 border-rose-200 ring-2 ring-rose-500/10";
+} else if (porcentaje >= 85) {
+colorBarra = "bg-amber-500";
+estiloFila = "bg-amber-50/50 border-amber-200";
+}
+
+return (
 <div 
-  key={f.id} 
-  onClick={() => { setFranjaDetalleSeleccionada(f); setModalDetalleFranjaAbierto(true); }}
-  className={`p-4 rounded-xl border flex flex-col gap-2 cursor-pointer hover:shadow-md hover:scale-[1.01] transition-all ${estiloFila}`}
+key={f.id} 
+onClick={() => { setFranjaDetalleSeleccionada(f); setModalDetalleFranjaAbierto(true); }}
+className={`p-4 rounded-xl border flex flex-col gap-2 cursor-pointer hover:shadow-md hover:scale-[1.01] transition-all ${estiloFila}`}
 >
-  <div className="flex justify-between items-center">
-    <div>
-      <span className="font-black text-xl text-slate-800">{f.hora}</span>
-      <span className="block text-xs font-bold text-slate-500 mt-0.5">
-        {reservados} / {f.max} pollos comprometidos
-      </span>
-    </div>
-    <button 
-      onClick={(e) => { e.stopPropagation(); abrirModalCarga(f.id); }} 
-      className="bg-white hover:bg-orange-50 text-orange-600 border border-orange-200 font-bold px-4 py-2 rounded-xl shadow-sm text-sm uppercase cursor-pointer z-10"
-    >
-      ⚙️ Cargar
-    </button>
+<div className="flex justify-between items-center">
+<div>
+{/* AQUÍ METEMOS EL CHIVATO AL LADO DE LA HORA */}
+<div className="flex flex-col gap-1">
+  <div className="flex items-center gap-2">
+    <span className="font-black text-xl text-slate-800">{f.hora}</span>
+    {alertaSecundaria && <span className="animate-pulse bg-rose-600 text-white text-[10px] px-2 py-0.5 rounded-md font-black shadow-sm tracking-wider">⚠️ REVISAR STOCK</span>}
   </div>
-  {faltaPollo > 0 && <div className="bg-rose-600 text-white font-black text-xs px-3 py-1.5 rounded-lg">🚨 FALTAN {faltaPollo} POLLOS</div>}
-  <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden shadow-inner mt-2">
-    <div className={`h-3 rounded-full transition-all duration-300 ${colorBarra}`} style={{ width: `${Math.min(porcentaje, 100)}%` }}></div>
-  </div>
+  
+  {/* AVISO DE PAELLAS PENDIENTES */}
+  {(() => {
+    const horaInicio = f.hora.split(' ')[0];
+    const paellasEnFranja = pedidos.filter(p => 
+      p.hora === horaInicio && 
+      !p.entregado && 
+      p.detalle.toUpperCase().includes('PAELLA')
+    ).length;
+    
+    return paellasEnFranja > 0 ? (
+      <div className="flex items-center gap-1 bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-md text-[10px] font-black animate-pulse shadow-sm w-fit">
+        🥘 {paellasEnFranja} PAELLA{paellasEnFranja > 1 ? 'S' : ''} PENDIENTE
+      </div>
+    ) : null;
+  })()}
+</div>
+
+<span className="block text-xs font-bold text-slate-500 mt-0.5">
+{reservados} / {f.max} pollos comprometidos
+</span>
+</div>
+<button 
+onClick={(e) => { e.stopPropagation(); abrirModalCarga(f.id); }} 
+className="bg-white hover:bg-orange-50 text-orange-600 border border-orange-200 font-bold px-4 py-2 rounded-xl shadow-sm text-sm uppercase cursor-pointer z-10"
+>
+⚙️ Cargar
+</button>
+</div>
+{faltaPollo > 0 && <div className="bg-rose-600 text-white font-black text-xs px-3 py-1.5 rounded-lg">🚨 FALTAN {faltaPollo} POLLOS</div>}
+<div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden shadow-inner mt-2">
+<div className={`h-3 rounded-full transition-all duration-300 ${colorBarra}`} style={{ width: `${Math.min(porcentaje, 100)}%` }}></div>
+</div>
 </div>
 );
 
-              })}
-            </div>
-          </section>
+})}
+</div>
+</section>
 
-<section className="bg-white rounded-2xl p-5 shadow-sm border border-orange-100">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 border-b-2 border-slate-100 pb-4">
-        <div className="flex flex-wrap gap-2 w-full">
-          <button onClick={() => setFiltroHora('Todos')} className={`flex-1 py-3 rounded-xl text-xs font-black uppercase border-2 transition-all cursor-pointer ${filtroHora === 'Todos' ? 'bg-slate-800 text-white border-slate-800' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}>Todos</button>
-          {franjas.map(f => {
-            const h = f.hora.split(' ')[0];
-            return (
-              <button key={f.id} onClick={() => setFiltroHora(h)} className={`flex-1 py-3 rounded-xl text-xs font-black border-2 transition-all cursor-pointer ${filtroHora === h ? 'bg-orange-600 text-white border-orange-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}>{h}</button>
-            );
-          })}
-        </div>
-
-<div className="w-full md:w-auto shrink-0 flex gap-2">
-  <button onClick={() => setMostrarSoloPendientes(!mostrarSoloPendientes)} title={mostrarSoloPendientes ? 'Ver todos los pedidos' : 'Ver solo pendientes'} className={`w-12 h-12 shrink-0 flex items-center justify-center rounded-xl text-2xl border-2 transition-all cursor-pointer ${mostrarSoloPendientes ? 'bg-amber-100 border-amber-300' : 'bg-slate-100 border-slate-200 hover:bg-slate-200'}`}>
-    {mostrarSoloPendientes ? '👀' : '👁️'}
-  </button>
-  <input type="text" placeholder="🔍 Buscar..." value={busqueda} onChange={(e) => setBusqueda(e.target.value.toUpperCase())} className="w-full md:w-48 bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-700 uppercase focus:outline-none focus:border-orange-500 placeholder:text-slate-400" />
+<section className="bg-white rounded-2xl p-5 shadow-sm border border-orange-100 flex flex-col overflow-hidden">
+<div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 border-b-2 border-slate-100 pb-4 shrink-0">
+<div className="flex flex-wrap gap-2 w-full">
+<button onClick={() => setFiltroHora('Todos')} className={`flex-1 py-3 rounded-xl text-xs font-black uppercase border-2 transition-all cursor-pointer ${filtroHora === 'Todos' ? 'bg-slate-800 text-white border-slate-800' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}>Todos</button>
+{franjas.map(f => {
+const h = f.hora.split(' ')[0];
+return (
+<button key={f.id} onClick={() => setFiltroHora(h)} className={`flex-1 py-3 rounded-xl text-xs font-black border-2 transition-all cursor-pointer ${filtroHora === h ? 'bg-orange-600 text-white border-orange-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}>{h}</button>
+);
+})}
 </div>
 
-            </div>
+<div className="w-full md:w-auto shrink-0 flex gap-2">
+<button onClick={() => setMostrarSoloPendientes(!mostrarSoloPendientes)} title={mostrarSoloPendientes ? 'Ver todos los pedidos' : 'Ver solo pendientes'} className={`w-12 h-12 shrink-0 flex items-center justify-center rounded-xl text-2xl border-2 transition-all cursor-pointer ${mostrarSoloPendientes ? 'bg-amber-100 border-amber-300' : 'bg-slate-100 border-slate-200 hover:bg-slate-200'}`}>
+{mostrarSoloPendientes ? '👀' : '👁️'}
+</button>
+<input type="text" placeholder="🔍 Buscar..." value={busqueda} onChange={(e) => setBusqueda(e.target.value.toUpperCase())} className="w-full md:w-48 bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-700 uppercase focus:outline-none focus:border-orange-500 placeholder:text-slate-400" />
+</div>
+</div>
 
-            <div className="space-y-3 max-h-[550px] overflow-y-auto pr-1">
-              {pedidosProcesados.length === 0 ? (
-                <div className="text-center text-slate-400 font-bold py-10 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-sm">No hay pedidos registrados.</div>
-              ) : (
-      pedidosProcesados
-        .filter(p => filtroHora === 'Todos' ? true : p.hora === filtroHora)
-        .filter(p => busqueda === '' ? true : p.cliente.includes(busqueda))
-        .filter(p => {
-          if (!mostrarSoloPendientes) return true; // Si está en "Viendo Todos", los mostramos
-          const esVentaDirecta = p.cliente === 'VENTA DIRECTA';
-          const estaCobrado = p.cobrado || esVentaDirecta;
-          return !(p.entregado && estaCobrado); // Si está entregado y cobrado, lo escondemos
-        })
-        .map((p) => {
+<div className="space-y-3 flex-1 overflow-y-auto pr-1 scrollbar-hide">
+{pedidosProcesados.length === 0 ? (
+
+<div className="text-center text-slate-400 font-bold py-10 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-sm">No hay pedidos registrados.</div>
+) : (
+pedidosProcesados
+.filter(p => filtroHora === 'Todos' ? true : p.hora === filtroHora)
+.filter(p => busqueda === '' ? true : p.cliente.includes(busqueda))
+.filter(p => {
+if (!mostrarSoloPendientes) return true; 
+const esVentaDirecta = p.cliente === 'VENTA DIRECTA';
+const estaCobrado = p.cobrado || esVentaDirecta;
+const tieneFianzaRetenida = p.fianza === 'retenida';
+// Se considera "Terminado" (y se oculta) SOLO si está entregado, cobrado y NO tiene fianza pendiente
+return !(p.entregado && estaCobrado && !tieneFianzaRetenida); 
+})
+.map((p) => {
 
   const esVentaDirecta = p.cliente === 'VENTA DIRECTA';
-  // Si es Venta Directa, lo forzamos a 'cobrado' para arreglar los pedidos viejos
   const estaCobrado = p.cobrado || esVentaDirecta; 
+  const fianzaRetenida = p.fianza === 'retenida';
+  
+  // NUEVO: Detectar si el pedido lleva Paella
+  const tienePaella = p.detalle.toUpperCase().includes('PAELLA');
+
+  // Lógica de colores para que el ticket grite si le falta algo
+  let estiloTarjeta = 'bg-amber-50/40 border-amber-200 shadow-sm'; // Pendiente normal
+  
+  if (tienePaella && !p.entregado) estiloTarjeta = 'bg-yellow-50 border-yellow-400 shadow-md ring-2 ring-yellow-400/60'; // ALARMA DE PAELLA 🥘
+  else if (p.entregado && !estaCobrado) estiloTarjeta = 'bg-rose-50 border-rose-300 shadow-sm ring-2 ring-rose-500/50'; // Deben dinero
+  else if (p.entregado && estaCobrado && fianzaRetenida) estiloTarjeta = 'bg-orange-50 border-orange-400 shadow-md ring-2 ring-orange-500/40'; // Tienen la sartén
+  else if (p.entregado && estaCobrado && !fianzaRetenida) estiloTarjeta = 'bg-slate-50 border-slate-200 opacity-55'; // Todo liquidado
 
   return (
-    <div key={p.id} onClick={() => { if(!esVentaDirecta) setPedidoSeleccionado(p) }} className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${esVentaDirecta ? 'cursor-default' : 'cursor-pointer hover:scale-[1.01]'} ${(p.entregado && estaCobrado) ? 'bg-slate-50 border-slate-200 opacity-55' : (p.entregado && !estaCobrado) ? 'bg-rose-50 border-rose-300 shadow-sm ring-2 ring-rose-500/50' : 'bg-amber-50/40 border-amber-200 shadow-sm'}`}>
+    <div key={p.id} onClick={() => { if(!esVentaDirecta) setPedidoSeleccionado(p) }} className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${esVentaDirecta ? 'cursor-default' : 'cursor-pointer hover:scale-[1.01]'} ${estiloTarjeta}`}>
       <div className="flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-mono font-black bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">{p.origen === 'QR' ? '📲 WEB' : '📞 TIENDA'}</span>
           
-          {/* Etiquetas de estado claras y a prueba de tontos */}
+          {/* CHIVATO VISUAL DE PAELLA PARA COCINA */}
+          {tienePaella && !p.entregado && <span className="text-xs px-3 py-1 rounded-lg font-black tracking-widest bg-yellow-400 text-yellow-900 shadow-md animate-pulse uppercase">🥘 ¡PAELLA!</span>}
+
           {(!p.entregado) && <span className="text-[9px] px-2 py-0.5 rounded font-black tracking-wider bg-amber-500 text-white">⏳ PENDIENTE</span>}
-          {(p.entregado && estaCobrado) && <span className="text-[9px] px-2 py-0.5 rounded font-black tracking-wider bg-slate-400 text-white">✓ FINALIZADO</span>}
           {(p.entregado && !estaCobrado) && <span className="text-xs px-3 py-1 rounded-lg font-black tracking-wider bg-rose-600 text-white animate-pulse shadow-md">⚠️ FALTA COBRAR</span>}
+          {fianzaRetenida && <span className="text-xs px-3 py-1 rounded-lg font-black tracking-wider bg-orange-600 text-white shadow-md">🥘 SARTÉN PENDIENTE</span>}
+          {(p.entregado && estaCobrado && !fianzaRetenida) && <span className="text-[9px] px-2 py-0.5 rounded font-black tracking-wider bg-slate-400 text-white">✓ FINALIZADO</span>}
         </div>
+
         <h3 className="text-xl font-black text-slate-800 mt-2 uppercase tracking-tight">{p.cliente}</h3>
+
         <p className="text-sm font-extrabold text-slate-600 mt-0.5">{p.detalle}</p>
       </div>
 
@@ -564,9 +694,12 @@ const [franjaDetalleSeleccionada, setFranjaDetalleSeleccionada] = useState(null)
               {franjas.map(fr => <option key={fr.id} value={fr.hora.split(' ')[0]}>{fr.hora.split(' ')[0]}</option>)}
             </select>
           )}
-          <button onClick={(e) => { e.stopPropagation(); handleAnularPedido(p.id); }} className="bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 font-bold text-xs px-3 py-1.5 rounded-xl cursor-pointer">❌ Anular</button>
+          {!(p.fianza === 'retenida' || (p.entregado && !p.cobrado)) && (
+            <button onClick={(e) => { e.stopPropagation(); handleAnularPedido(p.id); }} className="bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 font-bold text-xs px-3 py-1.5 rounded-xl cursor-pointer">❌ Anular</button>
+          )}
         </div>
       </div>
+
     </div>
   );
 })
@@ -576,9 +709,10 @@ const [franjaDetalleSeleccionada, setFranjaDetalleSeleccionada] = useState(null)
         </div>
       )}
 
-      {/* SECCIÓN CONFIGURACIÓN COMPLETA REESTABLECIDA Y BLINDADA */}
+       {/* SECCIÓN CONFIGURACIÓN COMPLETA REESTABLECIDA Y BLINDADA */}
       {vista === 'configuracion' && (
-        <section className="bg-white rounded-2xl p-6 shadow-sm border border-orange-100 max-w-5xl mx-auto space-y-8">
+        <section className="bg-white rounded-2xl p-6 shadow-sm border border-orange-100 max-w-5xl mx-auto space-y-8 flex-1 overflow-y-auto w-full mb-4">
+
           <div className="border-b pb-4 flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-black text-slate-800 uppercase">⏱️ 1. Estructura de Horarios</h2>
@@ -915,21 +1049,48 @@ const [franjaDetalleSeleccionada, setFranjaDetalleSeleccionada] = useState(null)
       </div>
 
       <div className="grid grid-cols-1 gap-4 mt-2">
-        {/* BLOQUE PRINCIPAL DE COBRO Y ENTREGA */}
+        
+        {/* CASO 1: FALTA COBRAR (Tenga o no paella) */}
         {!pedidoSeleccionado.cobrado && (
           <div className="bg-indigo-50 border-4 border-indigo-100 p-5 rounded-2xl flex flex-col gap-4 shadow-inner">
-            <button onClick={() => { handleCobrarPedido(pedidoSeleccionado.id); setPedidoSeleccionado(null); }} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-6 rounded-2xl uppercase text-3xl shadow-xl border-b-8 border-indigo-800 cursor-pointer active:scale-95 transition-all">
-              🪙 {pedidoSeleccionado.entregado ? 'COBRAR LO PENDIENTE' : 'COBRAR Y ENTREGAR'}
-            </button>
+            
+            {pedidoSeleccionado.fianza === 'pendiente' ? (
+              <>
+                <div className="bg-amber-100 border-2 border-amber-300 text-amber-800 p-3 rounded-xl font-black text-center text-sm uppercase">
+                  🥘 ESTE PEDIDO TIENE PAELLA
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3 w-full">
+                  <button onClick={() => handleCobrarPedido(pedidoSeleccionado.id, 'retenida')} className="flex-1 bg-amber-500 hover:bg-amber-600 text-white font-black py-4 rounded-2xl uppercase text-lg shadow-xl border-b-8 border-amber-700 cursor-pointer active:scale-95 transition-all">
+                    🪙 COBRAR + 20€ FIANZA
+                  </button>
+                  <button onClick={() => handleCobrarPedido(pedidoSeleccionado.id, 'descartada')} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-2xl uppercase text-lg shadow-xl border-b-8 border-indigo-800 cursor-pointer active:scale-95 transition-all">
+                    🪙 COBRAR NORMAL (Sin Fianza)
+                  </button>
+                </div>
+              </>
+            ) : (
+              <button onClick={() => handleCobrarPedido(pedidoSeleccionado.id)} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-6 rounded-2xl uppercase text-3xl shadow-xl border-b-8 border-indigo-800 cursor-pointer active:scale-95 transition-all">
+                🪙 {pedidoSeleccionado.entregado ? 'COBRAR LO PENDIENTE' : 'COBRAR Y ENTREGAR'}
+              </button>
+            )}
             
             {!pedidoSeleccionado.entregado && (
-              <button onClick={() => { handleEntregar(pedidoSeleccionado.id); setPedidoSeleccionado(null); }} className="w-full bg-amber-200 hover:bg-amber-300 text-amber-800 font-black py-4 rounded-xl uppercase text-sm border-2 border-amber-400 cursor-pointer active:scale-95 transition-all">
+              <button onClick={() => { handleEntregar(pedidoSeleccionado.id); setPedidoSeleccionado(null); }} className="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-black py-4 rounded-xl uppercase text-sm border-2 border-slate-400 cursor-pointer active:scale-95 transition-all">
                 ⚠️ Entregar en mano ahora, pero dejar PENDIENTE DE PAGO
               </button>
             )}
           </div>
         )}
 
+        {/* CASO 2: ESTÁ COBRADO, PERO TIENEN LA SARTÉN (FIANZA RETENIDA) */}
+        {pedidoSeleccionado.cobrado && pedidoSeleccionado.fianza === 'retenida' && (
+          <div className="bg-amber-50 border-4 border-amber-200 p-5 rounded-2xl flex flex-col gap-4 shadow-inner">
+            <span className="text-amber-700 font-black uppercase text-center text-lg">🥘 SARTÉN PENDIENTE DE DEVOLVER</span>
+            <button onClick={() => handleDevolverFianza(pedidoSeleccionado.id)} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-5 rounded-2xl uppercase text-2xl shadow-xl border-b-8 border-emerald-700 cursor-pointer active:scale-95 transition-all">
+              🤝 SARTÉN DEVUELTA (Abonar 20€)
+            </button>
+          </div>
+        )}
         
         <div className="bg-slate-100 p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 border-2 border-slate-200">
           <span className="font-black text-slate-600 uppercase text-lg">↪️ Mover a otra hora:</span>
@@ -939,8 +1100,12 @@ const [franjaDetalleSeleccionada, setFranjaDetalleSeleccionada] = useState(null)
           </select>
         </div>
 
-        <button onClick={() => { if(window.confirm("¿Estás seguro de anular y borrar este pedido para siempre?")) { handleAnularPedido(pedidoSeleccionado.id); setPedidoSeleccionado(null); } }} className="bg-rose-100 hover:bg-rose-200 text-rose-700 border-4 border-rose-200 font-black py-5 rounded-2xl uppercase text-xl cursor-pointer mt-2 transition-all">❌ ANULAR Y BORRAR PEDIDO</button>
+        {/* Solo permitimos borrar si NO tiene fianza retenida Y NO es una deuda (entregado pero no cobrado) */}
+        {!(pedidoSeleccionado.fianza === 'retenida' || (pedidoSeleccionado.entregado && !pedidoSeleccionado.cobrado)) && (
+          <button onClick={() => { if(window.confirm("¿Estás seguro de anular y borrar este pedido para siempre?")) { handleAnularPedido(pedidoSeleccionado.id); setPedidoSeleccionado(null); } }} className="bg-rose-100 hover:bg-rose-200 text-rose-700 border-4 border-rose-200 font-black py-5 rounded-2xl uppercase text-xl cursor-pointer mt-2 transition-all">❌ ANULAR Y BORRAR PEDIDO</button>
+        )}
       </div>
+
     </div>
   </div>
 )}
@@ -957,6 +1122,7 @@ const [franjaDetalleSeleccionada, setFranjaDetalleSeleccionada] = useState(null)
         const contarProd = (lista, nombre) => {
           let c = 0;
           lista.forEach(p => {
+            if (p.historico) return; // IGNORAMOS TICKETS VIEJOS
             const texto = p.detalle.includes('|') ? p.detalle.split('|')[1] : p.detalle;
             texto.split('+').forEach(parte => {
               const match = parte.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(.*)/i);
@@ -967,6 +1133,7 @@ const [franjaDetalleSeleccionada, setFranjaDetalleSeleccionada] = useState(null)
           });
           return c;
         };
+
 
         const prodsConStock = productosOrdenados.filter(p => p.controlaStock);
         const prodsSinStock = productosOrdenados.filter(p => !p.controlaStock);
