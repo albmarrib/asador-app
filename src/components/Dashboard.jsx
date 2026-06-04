@@ -1593,18 +1593,63 @@ return (
   const evolucionDiaria = Object.entries(datosDiarios).sort((a, b) => a[0].localeCompare(b[0]));
   
   // Cálculos de proporción
-  const proporcionIngresos = ventasGlobales > 0 ? ((ventasFiltradas / ventasGlobales) * 100).toFixed(1) : 0;
+const proporcionIngresos = ventasGlobales > 0 ? ((ventasFiltradas / ventasGlobales) * 100).toFixed(1) : 0;
   const proporcionVolumen = volumenGlobal > 0 ? ((volumenFiltrado / volumenGlobal) * 100).toFixed(1) : 0;
+
+  // NUEVO: GENERADOR NATIVO DE EXCEL USANDO TUS PROPIOS FILTROS
+  const exportarAExcel = () => {
+    if (!pedidosEnFecha || pedidosEnFecha.length === 0) {
+      alert("⚠️ No hay pedidos en las fechas seleccionadas.");
+      return;
+    }
+
+    const cabeceras = ["Fecha", "Hora", "Cliente", "Detalle Pedido", "Total (€)", "Estado"];
+    
+    const filas = pedidosEnFecha.map(p => {
+      const detalleLimpio = String(p.detalle || '').replace(/;/g, ',').replace(/\n/g, ' ').trim();
+      
+      // Calculamos lo que costó este ticket exacto para el Excel
+      let totalTicket = 0;
+      detalleLimpio.split('+').forEach(parte => {
+        const match = parte.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(.*)/i);
+        if (match) {
+          const prod = productos.find(x => x.nombre.toUpperCase() === match[2].trim().toUpperCase());
+          if (prod) totalTicket += (parseFloat(match[1]) * prod.precio);
+        }
+      });
+
+      const esVentaDirecta = p.cliente === 'VENTA DIRECTA';
+      const estado = (p.entregado && (p.cobrado || esVentaDirecta)) ? 'COBRADO' : (!p.entregado ? 'PÉRDIDA' : 'PENDIENTE');
+      const fechaFormat = p.fecha ? p.fecha.split('-').reverse().join('/') : new Date(parseInt(p.id) || Date.now()).toLocaleDateString('es-ES');
+
+      return [ fechaFormat, p.hora || '', p.cliente, detalleLimpio, totalTicket.toFixed(2), estado ];
+    });
+
+    const contenidoCsv = [cabeceras.join(";"), ...filas.map(f => f.join(";"))].join("\n");
+    const blob = new Blob(["\uFEFF" + contenidoCsv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Auditoria_LaFosca_${filtroFechaInicio}_al_${filtroFechaFin}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-md flex items-center justify-center p-4 lg:p-8 z-50 overflow-hidden">
       <div className="bg-white rounded-[2rem] w-full max-w-7xl h-[95vh] flex flex-col shadow-2xl overflow-hidden border-4 border-slate-800">
         
-        {/* CABECERA Y FILTROS */}
+{/* CABECERA Y FILTROS */}
         <div className="bg-slate-800 p-6 shrink-0 border-b-4 border-slate-900">
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
             <h3 className="text-3xl font-black text-white uppercase tracking-tight">📊 INTELIGENCIA DE NEGOCIO</h3>
-            <button onClick={() => setModalEstadisticasAbierto(false)} className="bg-slate-700 hover:bg-rose-600 text-white font-black text-xl px-6 py-2 rounded-xl cursor-pointer transition-colors">✕ CERRAR</button>
+            <div className="flex gap-3 w-full md:w-auto">
+              {/* NUEVO BOTÓN DE EXPORTAR A EXCEL */}
+              <button onClick={exportarAExcel} className="flex-1 md:flex-none bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-black text-xl px-6 py-2 rounded-xl cursor-pointer transition-all shadow-md flex items-center justify-center gap-2">
+                ⬇️ DESCARGAR EXCEL
+              </button>
+              <button onClick={() => setModalEstadisticasAbierto(false)} className="flex-1 md:flex-none bg-slate-700 hover:bg-rose-600 text-white font-black text-xl px-6 py-2 rounded-xl cursor-pointer transition-colors">✕ CERRAR</button>
+            </div>
           </div>
           
           {/* BARRA DE FILTROS TÁCTIL */}

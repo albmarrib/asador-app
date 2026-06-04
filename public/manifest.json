@@ -1,0 +1,16 @@
+{
+  "short_name": "La Fosca",
+  "name": "Rostisseria La Fosca - Mostrador",
+  "start_url": "/",
+  "background_color": "#ffffff",
+  "theme_color": "#0d9488",
+  "display": "standalone",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "logo-fosca.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ]
+}
