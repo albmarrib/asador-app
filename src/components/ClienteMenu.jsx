@@ -10,6 +10,7 @@ const APP_CONFIG = {
   subtitulo: 'Fes la teva comanda sense cues',
   telefono: '690 176 030',
   direccion: 'Carrer Garbí, 2 (Edifici La Proa)',
+  logoUrl: '/logo-fosca.png', // <-- ¡ESTA ES LA LÍNEA QUE FALTABA!
   // Diccionario de colores (Usamos 'teal' que encaja con el turquesa de tu logo)
   tema: {
     fondoBase: 'bg-teal-50/30',
@@ -263,12 +264,24 @@ const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
 
 return (
 <div className={`min-h-screen ${APP_CONFIG.tema.fondoBase} text-slate-800 pb-56 font-sans antialiased`}>
-<header className={`${APP_CONFIG.tema.headerBg} border-b ${APP_CONFIG.tema.bordeClaro} sticky top-0 z-40 shadow-sm px-4 py-4 text-center`}>
-<h1 className={`text-2xl font-black ${APP_CONFIG.tema.textoPrincipal} tracking-tight flex items-center justify-center gap-1.5`}>
-  🍗 {APP_CONFIG.nombre}
-</h1>
-<p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-0.5">{APP_CONFIG.subtitulo}</p>
-</header>
+
+{/* CONTENEDOR INVISIBLE PARA CENTRAR LA CABECERA */}
+<div className="sticky top-0 z-40 flex justify-center w-full px-2 mt-2">
+  {/* LA CABECERA REAL CON TAMAÑO MÁXIMO IDÉNTICO AL BOTÓN */}
+  <header className={`${APP_CONFIG.tema.headerBg} border ${APP_CONFIG.tema.bordeClaro} shadow-md px-4 py-3 w-full max-w-md rounded-2xl`}>
+    <h1 className={`text-xl font-black ${APP_CONFIG.tema.textoPrincipal} tracking-tight flex items-center justify-center gap-2`}>
+      {APP_CONFIG.logoUrl ? (
+        <img src={APP_CONFIG.logoUrl} alt="Logo" className="h-9 w-auto object-contain shrink-0" />
+      ) : (
+        <span className="text-2xl">🍗</span>
+      )}
+      <span className="truncate leading-none pt-1">{APP_CONFIG.nombre}</span>
+    </h1>
+    <p className="text-slate-400 text-[10px] font-bold uppercase text-center tracking-wider mt-1.5">
+      {APP_CONFIG.subtitulo}
+    </p>
+  </header>
+</div>
 
       <main className="max-w-md mx-auto p-4 space-y-6">
         <section className="space-y-3">

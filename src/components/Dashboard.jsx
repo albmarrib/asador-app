@@ -7,7 +7,7 @@ const LOCAL_ID = 'asador-dc';
 // NUEVO: CEREBRO DE MARCA BLANCA PARA EL PANEL
 const APP_CONFIG = {
   nombre: 'ROSTISSERIA LA FOSCA',
-  logoUrl: '', // Dejamos esto preparado para cuando decidas subir el logo
+ logoUrl: '/logo-fosca.png', // <-- FÍJATE EN LA BARRA INCLINADA AL PRINCIPIO
   tema: {
     fondoBase: 'bg-teal-50/40',
     headerBg: 'bg-white/95',
@@ -40,6 +40,11 @@ const [franjaDetalleSeleccionada, setFranjaDetalleSeleccionada] = useState(null)
 
 // ESTADO MODAL CIERRE DE CAJA
 const [modalCierreCajaAbierto, setModalCierreCajaAbierto] = useState(false);
+const [modalEstadisticasAbierto, setModalEstadisticasAbierto] = useState(false);
+// CONTROLES DEL MEGA-PANEL DE ESTADÍSTICAS
+const [filtroFechaInicio, setFiltroFechaInicio] = useState(new Date(new Date().setDate(1)).toISOString().split('T')[0]); // Día 1 de este mes por defecto
+const [filtroFechaFin, setFiltroFechaFin] = useState(new Date().toISOString().split('T')[0]); // Hoy por defecto
+const [filtroProductoEstat, setFiltroProductoEstat] = useState('TODOS');
 
   // ESTADOS FORMULARIO RESERVA MANUAL
   const [nombreCliente, setNombreCliente] = useState('');
@@ -557,64 +562,71 @@ return (
      <section className="bg-white rounded-2xl p-5 shadow-sm border border-orange-100 flex flex-col overflow-hidden">
             <h2 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4 shrink-0">📊 Estado de Carga</h2>
             <div className="space-y-4 overflow-y-auto pr-2 flex-1 scrollbar-hide">
- {franjas.map((f) => {
+{franjas.map((f) => {
 
 const reservados = obtenerReservadosPorFranja(f.hora);
 const faltaPollo = calcularAlertaFranja(f);
 const porcentaje = f.max > 0 ? (reservados / f.max) * 100 : 0;
 
-// RADAR DE OTROS PRODUCTOS: Comprobamos si patatas o butifarras se pasan
-const horaInicio = f.hora.split(' ')[0]; // Extraemos solo el "13:00" para que coincida con los pedidos
+// RADAR DE OTROS PRODUCTOS
+const horaInicio = f.hora.split(' ')[0];
 const pedidosFranja = pedidosProcesados.filter(p => p.hora === horaInicio && p.cliente !== 'VENTA DIRECTA');
 const alertaSecundaria = chequearSobrecargaOtros(f, pedidosFranja);
 
+// NUEVO: CHIVATO INTELIGENTE DE EXTRAS (Busca cualquier patata o butifarra pendiente en esta franja)
+const tieneExtrasPendientes = pedidosFranja.some(p => 
+  !p.entregado && 
+  (p.detalle.toUpperCase().includes('PATATA') || p.detalle.toUpperCase().includes('BUTIFARRA') || p.detalle.toUpperCase().includes('CANELON'))
+);
 
 let colorBarra = "bg-emerald-500";
 let estiloFila = "bg-slate-50/60 border-slate-100";
 
 if (faltaPollo > 0) {
-colorBarra = "bg-rose-500 animate-pulse";
-estiloFila = "bg-rose-50 border-rose-200 ring-2 ring-rose-500/10";
+  colorBarra = "bg-rose-500 animate-pulse";
+  estiloFila = "bg-rose-50 border-rose-200 ring-2 ring-rose-500/10";
 } else if (porcentaje >= 85) {
-colorBarra = "bg-amber-500";
-estiloFila = "bg-amber-50/50 border-amber-200";
+  colorBarra = "bg-amber-500";
+  estiloFila = "bg-amber-50/50 border-amber-200";
 }
 
 return (
 <div 
-key={f.id} 
-onClick={() => { setFranjaDetalleSeleccionada(f); setModalDetalleFranjaAbierto(true); }}
-className={`p-4 rounded-xl border flex flex-col gap-2 cursor-pointer hover:shadow-md hover:scale-[1.01] transition-all ${estiloFila}`}
+  key={f.id} 
+  onClick={() => { setFranjaDetalleSeleccionada(f); setModalDetalleFranjaAbierto(true); }}
+  className={`p-4 rounded-xl border flex flex-col gap-2 cursor-pointer hover:shadow-md hover:scale-[1.01] transition-all ${estiloFila}`}
 >
-<div className="flex justify-between items-center">
-<div>
-{/* AQUÍ METEMOS EL CHIVATO AL LADO DE LA HORA */}
-<div className="flex flex-col gap-1">
-  <div className="flex items-center gap-2">
-    <span className="font-black text-xl text-slate-800">{f.hora}</span>
-    {alertaSecundaria && <span className="animate-pulse bg-rose-600 text-white text-[10px] px-2 py-0.5 rounded-md font-black shadow-sm tracking-wider">⚠️ REVISAR STOCK</span>}
-  </div>
-  
-  {/* AVISO DE PAELLAS PENDIENTES */}
-  {(() => {
-    const horaInicio = f.hora.split(' ')[0];
-    const paellasEnFranja = pedidos.filter(p => 
-      p.hora === horaInicio && 
-      !p.entregado && 
-      p.detalle.toUpperCase().includes('PAELLA')
-    ).length;
-    
-    return paellasEnFranja > 0 ? (
-      <div className="flex items-center gap-1 bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-md text-[10px] font-black animate-pulse shadow-sm w-fit">
-        🥘 {paellasEnFranja} PAELLA{paellasEnFranja > 1 ? 'S' : ''} PENDIENTE
-      </div>
-    ) : null;
-  })()}
-</div>
+  <div className="flex justify-between items-center">
+    <div>
+            <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-2">
+          <span className="font-black text-xl text-slate-800">{f.hora}</span>
+          {alertaSecundaria && <span className="animate-pulse bg-rose-600 text-white text-[10px] px-2 py-0.5 rounded-md font-black shadow-sm tracking-wider">⚠️ EXCESO STOCK</span>}
+        </div>
 
-<span className="block text-xs font-bold text-slate-500 mt-0.5">
-{reservados} / {f.max} pollos comprometidos
-</span>
+        {/* ZONA DE ALERTAS APILADAS Y ALINEADAS */}
+        <div className="flex flex-col gap-1">
+          {tieneExtrasPendientes && !alertaSecundaria && (
+            <div className="flex items-center gap-1 bg-indigo-500 text-white px-2 py-0.5 rounded-md text-[10px] font-black animate-pulse shadow-sm w-fit tracking-wider">
+              🍟 REVISAR EXTRAS
+            </div>
+          )}
+          
+          {/* AVISO DE PAELLAS PENDIENTES */}
+          {(() => {
+            const paellasEnFranja = pedidos.filter(p => p.hora === horaInicio && !p.entregado && p.detalle.toUpperCase().includes('PAELLA')).length;
+            return paellasEnFranja > 0 ? (
+              <div className="flex items-center gap-1 bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-md text-[10px] font-black animate-pulse shadow-sm w-fit">
+                🥘 {paellasEnFranja} PAELLA{paellasEnFranja > 1 ? 'S' : ''} PENDIENTE
+              </div>
+            ) : null;
+          })()}
+        </div>
+      </div>
+      <span className="block text-xs font-bold text-slate-500 mt-1">
+        {reservados} / {f.max} pollos comprometidos
+      </span>
+
 </div>
 <button 
 onClick={(e) => { e.stopPropagation(); abrirModalCarga(f.id); }} 
@@ -737,13 +749,22 @@ return !(p.entregado && estaCobrado && !tieneFianzaRetenida);
           {/* --- ACCIONES DIARIAS (ARRIBA SIN SCROLL) --- */}
           <div className="bg-slate-50 border-4 border-slate-200 p-6 rounded-2xl flex flex-col md:flex-row justify-between items-center gap-6 shadow-sm">
             <div className="w-full md:w-auto flex flex-col sm:flex-row gap-4">
-              <button onClick={() => setVista('mostrador')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-8 py-4 rounded-xl uppercase text-sm shadow cursor-pointer border-b-4 border-emerald-800 active:scale-95 transition-all">
-                💾 Volver al Mostrador
-              </button>
-              <button onClick={() => setModalCierreCajaAbierto(true)} className="bg-rose-600 hover:bg-rose-700 text-white font-black px-6 py-4 rounded-xl shadow-md uppercase text-sm cursor-pointer active:scale-95 transition-all border-b-4 border-rose-800">
-                🧹 Cuadrar y Cerrar Caja
-              </button>
+
+            <button onClick={() => setVista('mostrador')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-6 py-4 rounded-xl uppercase text-sm shadow cursor-pointer border-b-4 border-emerald-800 active:scale-95 transition-all">
+            💾 Volver al Mostrador
+            </button>
+
+            <button onClick={() => setModalCierreCajaAbierto(true)} className="bg-rose-600 hover:bg-rose-700 text-white font-black px-4 py-4 rounded-xl shadow-md uppercase text-sm cursor-pointer active:scale-95 transition-all border-b-4 border-rose-800">
+            🧹 Cerrar Caja
+            </button>
+
+            {/* NUEVO BOTÓN DE ESTADÍSTICAS */}
+            <button onClick={() => setModalEstadisticasAbierto(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-6 py-4 rounded-xl shadow-md uppercase text-sm cursor-pointer active:scale-95 transition-all border-b-4 border-indigo-800">
+            📊 Estadísticas
+            </button>
+
             </div>
+
             <div className="hidden md:block text-right">
               <h3 className="text-lg font-black text-slate-700 uppercase">Panel Operativo</h3>
               <p className="text-slate-500 text-xs font-bold mt-1">Acciones de uso diario</p>
@@ -876,47 +897,77 @@ return !(p.entregado && estaCobrado && !tieneFianzaRetenida);
         </div>
       )}
 
-      {/* MODAL GIGANTE 2: BALANCE PRODUCCIÓN GLOBAL */}
-      {modalProduccionAbierto && (() => {
-        const totalesCocina = obtenerComandaGlobal();
-        return (
-          <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-md flex items-center justify-center p-4 lg:p-10 z-50 overflow-hidden">
-            <div className="bg-white rounded-[2rem] w-full max-w-6xl h-[85vh] flex flex-col shadow-2xl overflow-hidden border-4 border-indigo-500">
-              <div className="bg-indigo-600 p-6 flex justify-between items-center text-white shrink-0">
-                <h3 className="text-3xl font-black uppercase tracking-tight">📋 BALANCE DE PRODUCCIÓN HOY</h3>
-                <button onClick={() => setModalProduccionAbierto(false)} className="bg-indigo-700 hover:bg-rose-600 font-black text-xl px-6 py-2 rounded-xl cursor-pointer transition-colors border-b-4 border-indigo-900">✕ Cerrar</button>
-              </div>
-              <div className="p-8 flex-1 overflow-y-auto bg-slate-50">
-                {Object.keys(totalesCocina).length === 0 ? (
-                  <div className="text-center py-20"><span className="text-4xl text-slate-300 font-black">No hay reservas pendientes de entrega.</span></div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                    {Object.entries(totalesCocina).sort((a,b)=>b[1].total - a[1].total).map(([nombre, counts]) => (
-                      <div key={nombre} className="bg-white p-5 rounded-3xl border-4 border-indigo-100 flex flex-col items-center justify-center gap-2 shadow-md hover:border-indigo-300 transition-colors">
-                        <span className="text-base font-black text-slate-700 uppercase text-center leading-tight h-12 flex items-center">{nombre}</span>
-                        <div className="w-full bg-indigo-50 border-2 border-indigo-200 rounded-2xl p-4 flex flex-col items-center mb-2">
-                          <span className="text-xs font-black text-indigo-800 uppercase tracking-widest">Total Pedido</span>
-                          <span className="text-5xl font-black font-mono text-indigo-600">{counts.total}</span>
-                        </div>
-                        <div className="flex w-full gap-2">
-                          <div className="flex-1 bg-amber-50 border border-amber-200 rounded-xl p-2 flex flex-col items-center">
-                            <span className="text-[10px] font-black text-amber-800 uppercase">Falta Hacer</span>
-                            <span className="text-2xl font-black font-mono text-amber-600">{counts.pendiente}</span>
-                          </div>
-                          <div className="flex-1 bg-slate-100 border border-slate-200 rounded-xl p-2 flex flex-col items-center">
-                            <span className="text-[10px] font-black text-slate-500 uppercase">Entregado</span>
-                            <span className="text-2xl font-black font-mono text-slate-600">{counts.entregado}</span>
-                          </div>
-                        </div>
+   {/* MODAL GIGANTE 2: BALANCE PRODUCCIÓN GLOBAL */}
+{modalProduccionAbierto && (() => {
+  const totalesCocina = obtenerComandaGlobal();
+
+  // Función para saber cuánto hemos cargado en los hornos en total para el día
+  const getCargadoTotal = (nombre) => {
+    const n = nombre.toUpperCase();
+    if (n.includes('POLLO')) return franjas.reduce((sum, f) => sum + (f.capacidad?.pollos || f.max || 0), 0);
+    if (n.includes('PATATA')) return franjas.reduce((sum, f) => sum + (f.capacidad?.patatas || 0), 0);
+    if (n.includes('BUTIFARRA')) return franjas.reduce((sum, f) => sum + (f.capacidad?.butifarras || 0), 0);
+    return null; // Si no es de horno (bebidas, salsas), devuelve null
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-md flex items-center justify-center p-4 lg:p-10 z-50 overflow-hidden">
+      <div className="bg-white rounded-[2rem] w-full max-w-6xl h-[85vh] flex flex-col shadow-2xl overflow-hidden border-4 border-indigo-500">
+        <div className="bg-indigo-600 p-6 flex justify-between items-center text-white shrink-0">
+          <h3 className="text-3xl font-black uppercase tracking-tight">📋 BALANCE DE PRODUCCIÓN HOY</h3>
+          <button onClick={() => setModalProduccionAbierto(false)} className="bg-indigo-700 hover:bg-rose-600 font-black text-xl px-6 py-2 rounded-xl cursor-pointer transition-colors border-b-4 border-indigo-900">✕ Cerrar</button>
+        </div>
+        <div className="p-8 flex-1 overflow-y-auto bg-slate-50">
+          {Object.keys(totalesCocina).length === 0 ? (
+            <div className="text-center py-20"><span className="text-4xl text-slate-300 font-black">No hay reservas pendientes de entrega.</span></div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {Object.entries(totalesCocina).sort((a,b)=>b[1].total - a[1].total).map(([nombre, counts]) => {
+                const cargadoHorno = getCargadoTotal(nombre);
+                
+                return (
+                  <div key={nombre} className="bg-white p-5 rounded-3xl border-4 border-indigo-100 flex flex-col items-center justify-center gap-2 shadow-md hover:border-indigo-300 transition-colors relative pt-10">
+                    
+                    {/* NUEVO: CHIVATO DE HORNO Y SOBRANTE EN LA PARTE SUPERIOR */}
+                    {cargadoHorno !== null && (
+                      <div className={`absolute top-0 left-0 right-0 py-1.5 flex justify-center items-center gap-2 border-b-2 rounded-t-2xl ${cargadoHorno >= counts.total ? 'bg-emerald-100 border-emerald-200 text-emerald-800' : 'bg-rose-100 border-rose-200 text-rose-800'}`}>
+                         <span className="text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5">
+                           🔥 TOTAL HORNO: <span className="text-sm">{cargadoHorno}</span> 
+                           <span className="ml-1 bg-white/60 px-2 py-0.5 rounded shadow-sm border border-black/5 text-black">
+                             SOBRAN: {cargadoHorno - counts.total}
+                           </span>
+                         </span>
                       </div>
-                    ))}
+                    )}
+
+                    <span className="text-base font-black text-slate-700 uppercase text-center leading-tight h-12 flex items-center">{nombre}</span>
+                    
+                    <div className="w-full bg-indigo-50 border-2 border-indigo-200 rounded-2xl p-4 flex flex-col items-center mb-2 mt-1">
+                      <span className="text-xs font-black text-indigo-800 uppercase tracking-widest">Total Pedido</span>
+                      <span className="text-5xl font-black font-mono text-indigo-600">{counts.total}</span>
+                    </div>
+                    
+                    <div className="flex w-full gap-2">
+                      <div className="flex-1 bg-amber-50 border border-amber-200 rounded-xl p-2 flex flex-col items-center">
+                        <span className="text-[10px] font-black text-amber-800 uppercase">Falta Hacer</span>
+                        <span className="text-2xl font-black font-mono text-amber-600">{counts.pendiente}</span>
+                      </div>
+                      <div className="flex-1 bg-slate-100 border border-slate-200 rounded-xl p-2 flex flex-col items-center">
+                        <span className="text-[10px] font-black text-slate-500 uppercase">Entregado</span>
+                        <span className="text-2xl font-black font-mono text-slate-600">{counts.entregado}</span>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
+                );
+              })}
             </div>
-          </div>
-        );
-      })()}
+          )}
+        </div>
+      </div>
+    </div>
+  );
+})()}
+
 
       {/* MODAL GIGANTE 3: TPV VENTA DIRECTA COMPLETA */}
       {modalVentaDirectaAbierto && (() => {
@@ -1355,6 +1406,221 @@ return !(p.entregado && estaCobrado && !tieneFianzaRetenida);
           </div>
         );
       })()}
+{/* MODAL GIGANTE 8: MÓDULO ESTADÍSTICO PROFESIONAL */}
+{modalEstadisticasAbierto && (() => {
+  // 1. OBTENER Y FILTRAR PEDIDOS EN EL RANGO DE FECHAS
+  // Asumimos que el ID del pedido es un timestamp (Date.now()) si no hay campo 'fecha' guardado.
+  const pedidosArchivados = pedidos.filter(p => p.historico);
+  
+  const pedidosEnFecha = pedidosArchivados.filter(p => {
+    const fechaPedido = p.fecha || new Date(parseInt(p.id) || Date.now()).toISOString().split('T')[0];
+    return fechaPedido >= filtroFechaInicio && fechaPedido <= filtroFechaFin;
+  });
+
+  // 2. VARIABLES DE TOTALES DEL PERIODO
+  let ventasGlobales = 0;
+  let perdidasGlobales = 0;
+  let volumenGlobal = 0; // Unidades totales vendidas de todo
+  
+  let ventasFiltradas = 0;
+  let perdidasFiltradas = 0;
+  let volumenFiltrado = 0; // Unidades del producto específico
+
+  // 3. AGRUPACIÓN POR DÍAS (Para ver la evolución)
+  const datosDiarios = {};
+
+  pedidosEnFecha.forEach(p => {
+    const fechaPedido = p.fecha || new Date(parseInt(p.id) || Date.now()).toISOString().split('T')[0];
+    if (!datosDiarios[fechaPedido]) {
+      datosDiarios[fechaPedido] = { ventas: 0, perdidas: 0, volumen: 0, ventasFiltro: 0, volumenFiltro: 0 };
+    }
+
+    const esVentaDirecta = p.cliente === 'VENTA DIRECTA';
+    const estaCobrado = p.cobrado || esVentaDirecta;
+    const esExito = p.entregado && estaCobrado;
+    const esPerdida = !p.entregado;
+
+    // Analizamos el contenido del ticket
+    const texto = String(p.detalle).includes('|') ? String(p.detalle).split('|')[1] : String(p.detalle);
+    
+    texto.split('+').forEach(parte => {
+      const match = parte.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(.*)/i);
+      if (match) {
+        const cantidad = parseFloat(match[1]);
+        const nombreProd = match[2].trim().toUpperCase();
+        const prod = productos.find(x => x.nombre.toUpperCase() === nombreProd);
+        
+        if (prod) {
+          const valorLinea = cantidad * prod.precio;
+          const esProductoBuscado = filtroProductoEstat === 'TODOS' || nombreProd === filtroProductoEstat;
+
+          if (esExito) {
+            ventasGlobales += valorLinea;
+            volumenGlobal += cantidad;
+            datosDiarios[fechaPedido].ventas += valorLinea;
+            datosDiarios[fechaPedido].volumen += cantidad;
+
+            if (esProductoBuscado) {
+              ventasFiltradas += valorLinea;
+              volumenFiltrado += cantidad;
+              datosDiarios[fechaPedido].ventasFiltro += valorLinea;
+              datosDiarios[fechaPedido].volumenFiltro += cantidad;
+            }
+          } else if (esPerdida) {
+            perdidasGlobales += valorLinea;
+            datosDiarios[fechaPedido].perdidas += valorLinea;
+            if (esProductoBuscado) perdidasFiltradas += valorLinea;
+          }
+        }
+      }
+    });
+  });
+
+  // Convertimos el objeto de días a un array ordenado por fecha
+  const evolucionDiaria = Object.entries(datosDiarios).sort((a, b) => a[0].localeCompare(b[0]));
+  
+  // Cálculos de proporción
+  const proporcionIngresos = ventasGlobales > 0 ? ((ventasFiltradas / ventasGlobales) * 100).toFixed(1) : 0;
+  const proporcionVolumen = volumenGlobal > 0 ? ((volumenFiltrado / volumenGlobal) * 100).toFixed(1) : 0;
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-md flex items-center justify-center p-4 lg:p-8 z-50 overflow-hidden">
+      <div className="bg-white rounded-[2rem] w-full max-w-7xl h-[95vh] flex flex-col shadow-2xl overflow-hidden border-4 border-slate-800">
+        
+        {/* CABECERA Y FILTROS */}
+        <div className="bg-slate-800 p-6 shrink-0 border-b-4 border-slate-900">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-3xl font-black text-white uppercase tracking-tight">📊 INTELIGENCIA DE NEGOCIO</h3>
+            <button onClick={() => setModalEstadisticasAbierto(false)} className="bg-slate-700 hover:bg-rose-600 text-white font-black text-xl px-6 py-2 rounded-xl cursor-pointer transition-colors">✕ CERRAR</button>
+          </div>
+          
+          {/* BARRA DE FILTROS TÁCTIL */}
+          <div className="flex flex-wrap gap-4 bg-slate-700 p-4 rounded-2xl border-2 border-slate-600">
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Desde Fecha</label>
+              <input type="date" value={filtroFechaInicio} onChange={(e) => setFiltroFechaInicio(e.target.value)} className="w-full bg-slate-800 text-white font-mono font-black text-lg rounded-xl border border-slate-500 px-4 py-2 focus:outline-none focus:border-indigo-500" />
+            </div>
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Hasta Fecha</label>
+              <input type="date" value={filtroFechaFin} onChange={(e) => setFiltroFechaFin(e.target.value)} className="w-full bg-slate-800 text-white font-mono font-black text-lg rounded-xl border border-slate-500 px-4 py-2 focus:outline-none focus:border-indigo-500" />
+            </div>
+            <div className="flex-1 min-w-[250px]">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Acotar por Producto</label>
+              <select value={filtroProductoEstat} onChange={(e) => setFiltroProductoEstat(e.target.value)} className="w-full bg-slate-800 text-white font-black text-lg rounded-xl border border-slate-500 px-4 py-2 focus:outline-none focus:border-indigo-500 uppercase cursor-pointer">
+                <option value="TODOS">🌐 TODOS LOS PRODUCTOS</option>
+                {productosOrdenados.map(p => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6 flex-1 overflow-y-auto bg-slate-100 flex flex-col gap-6">
+          
+          {/* RESUMEN DE IMPACTO (KPIs) */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 shrink-0">
+            <div className="bg-white p-5 rounded-3xl border-2 border-emerald-200 shadow-sm flex flex-col justify-center items-center relative overflow-hidden">
+              <span className="text-xs font-black text-emerald-800 uppercase tracking-widest mb-1 z-10">Ingresos Totales</span>
+              <span className="text-4xl font-mono font-black text-emerald-600 z-10">{ventasFiltradas.toFixed(2)}€</span>
+              {filtroProductoEstat !== 'TODOS' && <span className="text-[10px] font-bold text-emerald-600 mt-1 z-10 bg-emerald-50 px-2 py-0.5 rounded">De {ventasGlobales.toFixed(2)}€ global</span>}
+            </div>
+            
+            <div className="bg-white p-5 rounded-3xl border-2 border-rose-200 shadow-sm flex flex-col justify-center items-center">
+              <span className="text-xs font-black text-rose-800 uppercase tracking-widest mb-1">Pérdidas Totales</span>
+              <span className="text-4xl font-mono font-black text-rose-600">{perdidasFiltradas.toFixed(2)}€</span>
+              <span className="text-[10px] font-bold text-rose-400 mt-1 uppercase">Material no recogido</span>
+            </div>
+
+            <div className="bg-white p-5 rounded-3xl border-2 border-indigo-200 shadow-sm flex flex-col justify-center items-center">
+              <span className="text-xs font-black text-indigo-800 uppercase tracking-widest mb-1">Volumen Despachado</span>
+              <span className="text-4xl font-mono font-black text-indigo-600">{volumenFiltrado} <span className="text-xl">ud.</span></span>
+              <span className="text-[10px] font-bold text-indigo-400 mt-1 uppercase">Unidades entregadas</span>
+            </div>
+
+            {/* TARJETA DE PROPORCIÓN (Solo visible si hay un producto seleccionado) */}
+            <div className={`p-5 rounded-3xl border-2 shadow-sm flex flex-col justify-center items-center transition-all ${filtroProductoEstat === 'TODOS' ? 'bg-slate-50 border-slate-200 opacity-50' : 'bg-amber-50 border-amber-300'}`}>
+              <span className="text-xs font-black text-slate-700 uppercase tracking-widest mb-1">Peso en el Negocio</span>
+              {filtroProductoEstat === 'TODOS' ? (
+                <span className="text-lg font-black text-slate-400 mt-2">Selecciona un producto</span>
+              ) : (
+                <>
+                  <div className="flex gap-4 w-full justify-center mt-1">
+                    <div className="text-center">
+                      <span className="block text-2xl font-mono font-black text-amber-600">{proporcionIngresos}%</span>
+                      <span className="text-[9px] uppercase font-bold text-amber-800">Del Dinero</span>
+                    </div>
+                    <div className="text-center border-l-2 border-amber-200 pl-4">
+                      <span className="block text-2xl font-mono font-black text-amber-600">{proporcionVolumen}%</span>
+                      <span className="text-[9px] uppercase font-bold text-amber-800">Del Volumen</span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* EVOLUCIÓN DIARIA (TABLA ANALÍTICA) */}
+          <div className="bg-white rounded-3xl border-2 border-slate-200 shadow-sm flex-1 flex flex-col overflow-hidden min-h-[300px]">
+            <div className="bg-slate-50 p-4 border-b-2 border-slate-200">
+              <h4 className="text-lg font-black text-slate-800 uppercase flex items-center gap-2">
+                📅 Desglose Diario <span className="text-xs text-slate-500 font-bold bg-white px-2 py-1 rounded-md border border-slate-200">{evolucionDiaria.length} días con actividad</span>
+              </h4>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto">
+              <div className="grid grid-cols-4 lg:grid-cols-5 bg-slate-800 text-white text-[10px] sm:text-xs font-black uppercase tracking-wider p-3 sticky top-0 z-10">
+                <div className="pl-2">Fecha</div>
+                <div className="text-right">Volumen (Ud)</div>
+                <div className="text-right text-emerald-400">Ingresos</div>
+                <div className="text-right text-rose-400">Pérdidas</div>
+                <div className="hidden lg:block text-right text-indigo-300">Rendimiento</div>
+              </div>
+              
+              <div className="divide-y divide-slate-100">
+                {evolucionDiaria.length === 0 ? (
+                  <div className="p-10 text-center text-slate-400 font-black uppercase text-lg">No hay datos en estas fechas</div>
+                ) : (
+                  evolucionDiaria.map(([fecha, datos]) => {
+                    const ingresosDia = filtroProductoEstat === 'TODOS' ? datos.ventas : datos.ventasFiltro;
+                    const volumenDia = filtroProductoEstat === 'TODOS' ? datos.volumen : datos.volumenFiltro;
+                    const perdidasDia = filtroProductoEstat === 'TODOS' ? datos.perdidas : (datos.perdidas > 0 ? '---' : 0); // La pérdida no siempre se puede aislar por producto exacto si es un ticket mezclado, simplificamos.
+
+                    // Barra visual de rendimiento (comparado con el mejor día)
+                    const maxVentasDias = Math.max(...evolucionDiaria.map(d => filtroProductoEstat === 'TODOS' ? d[1].ventas : d[1].ventasFiltro));
+                    const porcentajeBarra = maxVentasDias > 0 ? (ingresosDia / maxVentasDias) * 100 : 0;
+
+                    return (
+                      <div key={fecha} className="grid grid-cols-4 lg:grid-cols-5 p-3 sm:p-4 items-center hover:bg-slate-50 transition-colors font-mono text-sm sm:text-base">
+                        <div className="font-black text-slate-700">{fecha.split('-').reverse().join('/')}</div>
+                        <div className="text-right font-bold text-slate-600">{volumenDia}</div>
+                        <div className="text-right font-black text-emerald-600">{ingresosDia.toFixed(2)}€</div>
+                        <div className="text-right font-bold text-rose-500">{perdidasDia === '---' ? perdidasDia : perdidasDia.toFixed(2) + '€'}</div>
+                        <div className="hidden lg:flex justify-end items-center px-4">
+                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                            <div className="bg-emerald-400 h-full rounded-full" style={{ width: `${porcentajeBarra}%` }}></div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+            
+            {/* TOTALES AL PIE DE LA TABLA */}
+            <div className="bg-slate-100 p-4 border-t-2 border-slate-200 grid grid-cols-4 lg:grid-cols-5 font-mono text-base sm:text-lg">
+              <div className="font-black text-slate-800 uppercase font-sans">TOTAL</div>
+              <div className="text-right font-black text-slate-800">{volumenFiltrado}</div>
+              <div className="text-right font-black text-emerald-600">{ventasFiltradas.toFixed(2)}€</div>
+              <div className="text-right font-black text-rose-600">{perdidasFiltradas.toFixed(2)}€</div>
+              <div className="hidden lg:block"></div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+})()}
 
 </div>
 );
