@@ -4,7 +4,28 @@ import { collection, onSnapshot, addDoc, query, where } from 'firebase/firestore
 
 const LOCAL_ID = 'asador-dc'; 
 
+// NUEVO: CEREBRO DE MARCA BLANCA (SaaS)
+const APP_CONFIG = {
+  nombre: 'ROSTISSERIA LA FOSCA',
+  subtitulo: 'Fes la teva comanda sense cues',
+  telefono: '690 176 030',
+  direccion: 'Carrer Garbí, 2 (Edifici La Proa)',
+  // Diccionario de colores (Usamos 'teal' que encaja con el turquesa de tu logo)
+  tema: {
+    fondoBase: 'bg-teal-50/30',
+    headerBg: 'bg-white',
+    textoPrincipal: 'text-teal-600',
+    textoSecundario: 'text-teal-800',
+    bordeClaro: 'border-teal-100',
+    bordeOscuro: 'border-teal-600',
+    botonPrimario: 'bg-teal-600 hover:bg-teal-700',
+    botonActivo: 'bg-teal-600 border-teal-600 text-white',
+    textoAcento: 'text-teal-200'
+  }
+};
+
 export default function ClienteMenu() {
+
   const [franjas, setFranjas] = useState([]);
   const [productos, setProductos] = useState([]);
   const [pedidos, setPedidos] = useState([]);
@@ -240,12 +261,14 @@ const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
     );
   }
 
-  return (
-    <div className="min-h-screen bg-orange-50/30 text-slate-800 pb-32 font-sans antialiased">
-      <header className="bg-white border-b border-orange-100 sticky top-0 z-40 shadow-sm px-4 py-4 text-center">
-        <h1 className="text-2xl font-black text-orange-600 tracking-tight flex items-center justify-center gap-1.5">🔥 Asador D&C</h1>
-        <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-0.5">Haz tu pedido sin colas</p>
-      </header>
+return (
+<div className={`min-h-screen ${APP_CONFIG.tema.fondoBase} text-slate-800 pb-56 font-sans antialiased`}>
+<header className={`${APP_CONFIG.tema.headerBg} border-b ${APP_CONFIG.tema.bordeClaro} sticky top-0 z-40 shadow-sm px-4 py-4 text-center`}>
+<h1 className={`text-2xl font-black ${APP_CONFIG.tema.textoPrincipal} tracking-tight flex items-center justify-center gap-1.5`}>
+  🍗 {APP_CONFIG.nombre}
+</h1>
+<p className="text-slate-400 text-xs font-bold uppercase tracking-wider mt-0.5">{APP_CONFIG.subtitulo}</p>
+</header>
 
       <main className="max-w-md mx-auto p-4 space-y-6">
         <section className="space-y-3">
@@ -257,14 +280,15 @@ const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
              </p>
           )}
 
-          {productos.map((plato) => {
-            const cantidad = carrito[plato.id] || 0;
-            return (
-              <div key={plato.id} className={`bg-white rounded-2xl p-4 border shadow-sm flex items-center justify-between gap-4 transition-all ${cantidad > 0 ? 'border-orange-400' : 'border-orange-100/60'}`}>
-                <div className="flex-1">
-                  <h3 className="text-base font-black text-slate-800 leading-tight uppercase">{plato.nombre}</h3>
-                  <span className="text-sm font-black text-orange-600 block mt-1">{parseFloat(plato.precio).toFixed(2)}€</span>
-                </div>
+{productos.map((plato) => {
+const cantidad = carrito[plato.id] || 0;
+return (
+<div key={plato.id} className={`bg-white rounded-2xl p-4 border shadow-sm flex items-center justify-between gap-4 transition-all ${cantidad > 0 ? APP_CONFIG.tema.bordeOscuro : APP_CONFIG.tema.bordeClaro}`}>
+<div className="flex-1">
+<h3 className="text-base font-black text-slate-800 leading-tight uppercase">{plato.nombre}</h3>
+<span className={`text-sm font-black ${APP_CONFIG.tema.textoPrincipal} block mt-1`}>{parseFloat(plato.precio).toFixed(2)}€</span>
+</div>
+
                 <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl p-1 shadow-inner">
                   {cantidad > 0 ? (
                     <>
@@ -329,26 +353,26 @@ const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
 
                   return (
                   <button
-                      key={f.id}
-                      type="button"
-                      disabled={botonDeshabilitado} 
-                      onClick={() => setHoraRecogida(h)}
-                      className={`py-3 rounded-xl flex flex-col items-center justify-center transition-all border-2 
-                      ${botonDeshabilitado 
-                      ? 'bg-slate-50 border-slate-100 opacity-50 cursor-not-allowed grayscale' 
-                      : horaRecogida === h 
-                      ? 'bg-orange-600 border-orange-600 text-white shadow-md' 
-                      : 'bg-white border-slate-200 text-slate-700 hover:border-orange-300'}`}
-                      >
-                      <span className="text-sm font-black font-mono">{h}</span>
-                      {bloqueadoPorPaella ? (
-                      <span className="text-[8px] font-black text-rose-500 tracking-wider uppercase">Paella: +2h</span>
-                      ) : !cabenEnElHorno ? (
-                      <span className="text-[9px] font-black text-rose-500 tracking-wider uppercase">Completo</span>
-                      ) : (
-                      <span className={`text-[9px] font-black tracking-wider ${horaRecogida === h ? 'text-orange-200' : 'text-emerald-600'}`}>Disponible</span>
-                      )}
-                      </button>
+key={f.id}
+type="button"
+disabled={botonDeshabilitado} 
+onClick={() => setHoraRecogida(h)}
+className={`py-3 rounded-xl flex flex-col items-center justify-center transition-all border-2 
+${botonDeshabilitado 
+? 'bg-slate-50 border-slate-100 opacity-50 cursor-not-allowed grayscale' 
+: horaRecogida === h 
+? APP_CONFIG.tema.botonActivo + ' shadow-md' 
+: 'bg-white border-slate-200 text-slate-700 hover:' + APP_CONFIG.tema.bordeOscuro}`}
+>
+<span className="text-sm font-black font-mono">{h}</span>
+{bloqueadoPorPaella ? (
+<span className="text-[8px] font-black text-rose-500 tracking-wider uppercase">Paella: +2h</span>
+) : !cabenEnElHorno ? (
+<span className="text-[9px] font-black text-rose-500 tracking-wider uppercase">Completo</span>
+) : (
+<span className={`text-[9px] font-black tracking-wider ${horaRecogida === h ? APP_CONFIG.tema.textoAcento : APP_CONFIG.tema.textoPrincipal}`}>Disponible</span>
+)}
+</button>
                         
                   );
                 })}
@@ -376,12 +400,13 @@ const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
       </main>
 
       {totalArticulos > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-orange-100 shadow-xl flex justify-center z-40">
+<div className={`fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t ${APP_CONFIG.tema.bordeClaro} shadow-xl flex justify-center z-40`}>
 <button
   onClick={handleEnviarReserva}
   disabled={franjas.length === 0}
-  className="w-full max-w-md bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black py-4 px-5 rounded-2xl shadow-lg flex justify-between items-center text-sm uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer"
+  className={`w-full max-w-md ${APP_CONFIG.tema.botonPrimario} active:scale-95 text-white font-black py-4 px-5 rounded-2xl shadow-lg flex justify-between items-center text-sm uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer`}
 >
+
   <span>🛒 Confirmar ({totalArticulos})</span>
   <div className="flex flex-col items-end">
     <span className="bg-emerald-800/40 px-3 py-1 rounded-lg font-mono font-black">{calcularTotal().toFixed(2)}€</span>

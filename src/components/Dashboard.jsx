@@ -4,7 +4,20 @@ import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where
 
 const LOCAL_ID = 'asador-dc';
 
+// NUEVO: CEREBRO DE MARCA BLANCA PARA EL PANEL
+const APP_CONFIG = {
+  nombre: 'ROSTISSERIA LA FOSCA',
+  logoUrl: '', // Dejamos esto preparado para cuando decidas subir el logo
+  tema: {
+    fondoBase: 'bg-teal-50/40',
+    headerBg: 'bg-white/95',
+    textoPrincipal: 'text-teal-600',
+    bordeClaro: 'border-teal-100',
+  }
+};
+
 export default function Dashboard() {
+
   const [vista, setVista] = useState('mostrador'); 
   const [franjas, setFranjas] = useState([]);
   const [pedidos, setPedidos] = useState([]);
@@ -25,6 +38,8 @@ const [mostrarSoloPendientes, setMostrarSoloPendientes] = useState(true);
 const [modalDetalleFranjaAbierto, setModalDetalleFranjaAbierto] = useState(false);
 const [franjaDetalleSeleccionada, setFranjaDetalleSeleccionada] = useState(null);
 
+// ESTADO MODAL CIERRE DE CAJA
+const [modalCierreCajaAbierto, setModalCierreCajaAbierto] = useState(false);
 
   // ESTADOS FORMULARIO RESERVA MANUAL
   const [nombreCliente, setNombreCliente] = useState('');
@@ -482,19 +497,26 @@ const handleGuardarPedido = async () => {
     // 3. Para el resto de productos (patatas, canelones...), orden alfabético normal
     return nomA.localeCompare(nomB);
   });
-
-  return (
-<div className="fixed inset-0 overflow-hidden overscroll-none flex flex-col bg-orange-50/40 text-slate-800 p-4 md:p-6 font-sans antialiased">
-<header className="shrink-0 z-40 bg-white/95 backdrop-blur-md rounded-2xl p-6 shadow-md border border-orange-100 mb-4 relative overflow-hidden">
+return (
+<div className={`fixed inset-0 overflow-hidden overscroll-none flex flex-col ${APP_CONFIG.tema.fondoBase} text-slate-800 p-4 md:p-6 font-sans antialiased`}>
+<header className={`shrink-0 z-40 ${APP_CONFIG.tema.headerBg} backdrop-blur-md rounded-2xl p-6 shadow-md border ${APP_CONFIG.tema.bordeClaro} mb-4 relative overflow-hidden`}>
        <div className="absolute top-0 right-0 bg-emerald-500 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl shadow-sm flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span> Nube Conectada
         </div>
 
         <div className="flex flex-col lg:flex-row justify-between items-center gap-6 mt-2">
-          <div className="text-center lg:text-left">
-            <h1 className="text-3xl font-black text-orange-600 tracking-tight">🔥 Asador D&C</h1>
-            <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mt-1">Panel de Control de Reservas</p>
+          <div className="text-center lg:text-left flex items-center justify-center lg:justify-start gap-3">
+            {APP_CONFIG.logoUrl ? (
+              <img src={APP_CONFIG.logoUrl} alt="Logo" className="h-12 w-auto object-contain" />
+            ) : (
+              <span className="text-4xl">🍗</span>
+            )}
+            <div>
+              <h1 className={`text-3xl font-black ${APP_CONFIG.tema.textoPrincipal} tracking-tight uppercase`}>{APP_CONFIG.nombre}</h1>
+              <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mt-1">Panel de Control de Reservas</p>
+            </div>
           </div>
+
           <div className="grid grid-cols-3 gap-4 w-full lg:w-auto text-center font-mono">
             <div className="bg-slate-100 p-3 rounded-xl border border-slate-200">
               <span className="block text-[10px] font-bold text-slate-500 uppercase">Total Asador</span>
@@ -708,12 +730,29 @@ return !(p.entregado && estaCobrado && !tieneFianzaRetenida);
           </section>
         </div>
       )}
-
-       {/* SECCIÓN CONFIGURACIÓN COMPLETA REESTABLECIDA Y BLINDADA */}
+      {/* SECCIÓN CONFIGURACIÓN COMPLETA REESTABLECIDA Y BLINDADA */}
       {vista === 'configuracion' && (
         <section className="bg-white rounded-2xl p-6 shadow-sm border border-orange-100 max-w-5xl mx-auto space-y-8 flex-1 overflow-y-auto w-full mb-4">
 
+          {/* --- ACCIONES DIARIAS (ARRIBA SIN SCROLL) --- */}
+          <div className="bg-slate-50 border-4 border-slate-200 p-6 rounded-2xl flex flex-col md:flex-row justify-between items-center gap-6 shadow-sm">
+            <div className="w-full md:w-auto flex flex-col sm:flex-row gap-4">
+              <button onClick={() => setVista('mostrador')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-8 py-4 rounded-xl uppercase text-sm shadow cursor-pointer border-b-4 border-emerald-800 active:scale-95 transition-all">
+                💾 Volver al Mostrador
+              </button>
+              <button onClick={() => setModalCierreCajaAbierto(true)} className="bg-rose-600 hover:bg-rose-700 text-white font-black px-6 py-4 rounded-xl shadow-md uppercase text-sm cursor-pointer active:scale-95 transition-all border-b-4 border-rose-800">
+                🧹 Cuadrar y Cerrar Caja
+              </button>
+            </div>
+            <div className="hidden md:block text-right">
+              <h3 className="text-lg font-black text-slate-700 uppercase">Panel Operativo</h3>
+              <p className="text-slate-500 text-xs font-bold mt-1">Acciones de uso diario</p>
+            </div>
+          </div>
+
           <div className="border-b pb-4 flex justify-between items-center">
+
+
             <div>
               <h2 className="text-2xl font-black text-slate-800 uppercase">⏱️ 1. Estructura de Horarios</h2>
               <p className="text-slate-500 text-xs mt-0.5">Define los tramos de horas de reparto del negocio.</p>
@@ -789,17 +828,6 @@ return !(p.entregado && estaCobrado && !tieneFianzaRetenida);
             ))}
           </div>
 
-          <div className="mt-8 p-6 bg-rose-50 border border-rose-200 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-inner">
-            <div>
-              <h3 className="text-lg font-black text-rose-700 uppercase">🧹 4. Cierre del Día</h3>
-              <p className="text-rose-600 text-xs mt-1 font-bold">Oculta todos los pedidos actuales y reinicia la disponibilidad de pollos para el día siguiente.</p>
-            </div>
-            <button onClick={handleLimpiarDia} className="bg-rose-600 hover:bg-rose-700 text-white font-black px-6 py-3 rounded-xl shadow-md uppercase text-sm cursor-pointer whitespace-nowrap active:scale-95">Cerrar Día</button>
-          </div>
-
-          <div className="text-right border-t border-slate-100 pt-6">
-            <button onClick={() => setVista('mostrador')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-8 py-4 rounded-xl uppercase text-sm shadow cursor-pointer">💾 Volver al Mostrador</button>
-          </div>
         </section>
       )}
 
@@ -1236,6 +1264,92 @@ return !(p.entregado && estaCobrado && !tieneFianzaRetenida);
                   </div>
                 </div>
 
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+      {/* MODAL GIGANTE 7: CIERRE DE CAJA */}
+      {modalCierreCajaAbierto && (() => {
+        let ventas = 0;
+        let fianzasRetenidas = 0;
+        let pendienteCobro = 0;
+        let perdidas = 0;
+
+        pedidos.forEach(p => {
+          if (p.historico) return; // Solo calculamos el dinero movido HOY
+
+          let precioPedido = 0;
+          const texto = String(p.detalle).includes('|') ? String(p.detalle).split('|')[1] : String(p.detalle);
+          texto.split('+').forEach(parte => {
+            const match = parte.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(.*)/i);
+            if (match) {
+              const prod = productos.find(x => x.nombre.toUpperCase() === match[2].trim().toUpperCase());
+              if (prod) precioPedido += (parseFloat(match[1]) * prod.precio);
+            }
+          });
+
+          const esVentaDirecta = p.cliente === 'VENTA DIRECTA';
+          const estaCobrado = p.cobrado || esVentaDirecta;
+
+          if (p.entregado && estaCobrado) ventas += precioPedido;
+          else if (p.entregado && !estaCobrado) pendienteCobro += precioPedido;
+          else if (!p.entregado) perdidas += precioPedido;
+
+          // Si hoy se quedaron con la sartén, tenemos 20€ físicos en caja
+          if (p.fianza === 'retenida') fianzasRetenidas += 20; 
+        });
+
+        const totalCajaEsperado = ventas + fianzasRetenidas;
+
+        return (
+          <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-md flex items-center justify-center p-4 lg:p-10 z-50 overflow-hidden">
+            <div className="bg-white rounded-[2rem] w-full max-w-4xl flex flex-col shadow-2xl overflow-hidden border-4 border-rose-500">
+              <div className="bg-rose-600 p-6 flex justify-between items-center text-white shrink-0">
+                <h3 className="text-3xl font-black uppercase tracking-tight">🧹 CUADRE Y CIERRE DE CAJA</h3>
+                <button onClick={() => setModalCierreCajaAbierto(false)} className="bg-rose-700 hover:bg-slate-800 font-black text-2xl px-6 py-2 rounded-xl cursor-pointer transition-colors border-b-4 border-rose-900">✕ CANCELAR</button>
+              </div>
+              
+              <div className="p-8 flex-1 bg-slate-50 space-y-6 overflow-y-auto">
+                <div className="text-center bg-rose-100 text-rose-800 p-4 rounded-2xl font-bold text-sm border-2 border-rose-200">
+                  Al confirmar, todos los pedidos se archivarán. Las pérdidas se registrarán en el histórico y los hornos se vaciarán a cero para el próximo día.
+                </div>
+
+                <div className="bg-white p-6 rounded-3xl shadow-sm border-2 border-slate-200">
+                  <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4 border-b-2 border-slate-100 pb-2">💰 Dinero Físico en Caja</h4>
+                  
+                  <div className="flex justify-between items-center py-3 border-b border-dashed border-slate-200">
+                    <span className="text-xl font-black text-slate-700 uppercase">Ventas Cobradas (Mostrador + Reservas)</span>
+                    <span className="text-2xl font-mono font-black text-emerald-600">{ventas.toFixed(2)}€</span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center py-3 border-b border-slate-200">
+                    <span className="text-xl font-black text-slate-700 uppercase">Fianzas Retenidas (Sartenes)</span>
+                    <span className="text-2xl font-mono font-black text-amber-500">+{fianzasRetenidas.toFixed(2)}€</span>
+                  </div>
+
+                  <div className="flex justify-between items-center pt-6 mt-2 bg-slate-50 -mx-6 -mb-6 p-6 rounded-b-3xl border-t-2 border-slate-200">
+                    <span className="text-3xl font-black text-slate-800 uppercase">TOTAL A CUADRAR:</span>
+                    <span className="text-5xl font-mono font-black text-rose-600 bg-white px-6 py-2 rounded-2xl border-4 border-rose-100 shadow-sm">{totalCajaEsperado.toFixed(2)}€</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-orange-50 p-5 rounded-3xl border-2 border-orange-200 text-center shadow-inner">
+                    <span className="block text-xs font-black text-orange-800 uppercase tracking-widest mb-1">En la calle (Falta Cobrar)</span>
+                    <span className="text-3xl font-mono font-black text-orange-600">{pendienteCobro.toFixed(2)}€</span>
+                  </div>
+                  <div className="bg-slate-100 p-5 rounded-3xl border-2 border-slate-200 text-center shadow-inner">
+                    <span className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1">Pérdidas (No recogido)</span>
+                    <span className="text-3xl font-mono font-black text-slate-400">{perdidas.toFixed(2)}€</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-6 bg-white border-t-4 border-slate-100">
+                <button onClick={() => { setModalCierreCajaAbierto(false); handleLimpiarDia(); }} className="w-full bg-rose-600 hover:bg-rose-700 text-white font-black py-6 rounded-2xl uppercase text-3xl shadow-xl border-b-8 border-rose-800 cursor-pointer active:scale-95 transition-all">
+                  🚨 CONFIRMAR Y CERRAR EL DÍA
+                </button>
               </div>
             </div>
           </div>
