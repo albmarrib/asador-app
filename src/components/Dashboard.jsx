@@ -25,7 +25,7 @@ export default function Dashboard() {
 const [filtroHora, setFiltroHora] = useState('Todos');
 const [busqueda, setBusqueda] = useState(''); 
 const [mostrarSoloPendientes, setMostrarSoloPendientes] = useState(true);
-
+const [tecladoBuscarAbierto, setTecladoBuscarAbierto] = useState(false);
   
   // ESTADOS MODALES PANTALLA COMPLETA
   const [modalAbierto, setModalAbierto] = useState(false);
@@ -303,10 +303,20 @@ const [filtroProductoEstat, setFiltroProductoEstat] = useState('TODOS');
     setErrorValidacion(''); setModalAbierto(true); setTecladoPantallaCompleta(false);
   };
 
-  const handleTecladoPresionado = (letra) => {
-    if (letra === '←') setNombreCliente(prev => prev.slice(0, -1));
-    else if (nombreCliente.length < 18) setNombreCliente(prev => prev + letra);
-  };
+const handleTecladoPresionado = (letra) => {
+  if (letra === '←') setNombreCliente(prev => prev.slice(0, -1));
+  else if (nombreCliente.length < 18) setNombreCliente(prev => prev + letra);
+};
+
+const handleTecladoBuscarPresionado = (letra) => {
+  if (letra === '←') {
+    setBusqueda(prev => prev.slice(0, -1));
+  } else if (letra === ' ') {
+    setBusqueda(prev => prev + ' ');
+  } else {
+    if (busqueda.length < 18) setBusqueda(prev => prev + letra.toUpperCase());
+  }
+};
 
   const handleModificarExtra = (productoId, incremento) => {
     setCarritoExtras(prev => {
@@ -325,18 +335,30 @@ const handleGuardarPedido = async () => {
   let stockConsumido = 0;
   let llevaPaella = false;
 
+let racionesPaella = 0; // <-- Guardamos cuántas raciones piden
+
   Object.entries(carritoExtras).forEach(([prodId, cant]) => {
     const prodInfo = productos.find(p => p.id === prodId);
     if (prodInfo) {
       lineasTicket.push(`${cant}x ${prodInfo.nombre}`);
       if (prodInfo.controlaStock) stockConsumido += (parseFloat(prodInfo.consumeUnidades) * cant);
-      if (prodInfo.nombre.toUpperCase() === 'PAELLA' && cant > 0) llevaPaella = true;
+      if (prodInfo.nombre.toUpperCase() === 'PAELLA' && cant > 0) {
+        llevaPaella = true;
+        racionesPaella = cant; // <-- Almacenamos el número de personas
+      }
     }
   });
 
   if (lineasTicket.length === 0) { setErrorValidacion('⚠️ El pedido no puede estar vacío. Añade algún producto.'); return; }
 
+  // NUEVA LIMITACIÓN: MÍNIMO 2 PERSONAS PARA LA PAELLA
+  if (llevaPaella && racionesPaella < 2) {
+    setErrorValidacion('⚠️ LA PAELLA DEBE SER COMO MÍNIMO PARA 2 PERSONAS.');
+    return;
+  }
+
   // REGLA DE LAS 2 HORAS PARA LA PAELLA
+
   if (llevaPaella) {
     const ahora = new Date();
     const [horaSel, minSel] = horaSeleccionada.split(':').map(Number);
@@ -452,20 +474,37 @@ const handleGuardarPedido = async () => {
     if(window.confirm("¿Seguro que quieres borrar este tramo horario?")) await deleteDoc(doc(db, 'franjas', id));
   };
 
-  const handleCrearProductoNuevo = async () => {
-    const nombre = prompt("Nombre del producto (Ej: Pollo, Medio Pollo, Canelones):");
+const handleCrearProductoNuevo = async () => {
+    // 1. Pedimos los nombres en todos los idiomas
+    const nombre = prompt("Nombre en CASTELLANO (Ej: POLLO ENTERO):");
     if (!nombre) return;
+    
+    const nombreCa = prompt("Nombre en CATALÁN (Ej: POLLASTRE SENCER):") || nombre;
+    const nombreEn = prompt("Nombre en INGLÉS (Ej: WHOLE CHICKEN):") || nombre;
+    const nombreFr = prompt("Nombre en FRANCÉS (Ej: POULET ENTIER):") || nombre;
+
     const precio = prompt("Precio en euros (Ej: 12.50):");
     if (!precio) return;
+    
     const controlaStock = window.confirm("¿Este producto necesita CONTROL DE STOCK diario en los hornos?\n\n(Aceptar = SÍ / Cancelar = NO)");
     let stock = 0, consumeUnidades = 0;
     if (controlaStock) {
       stock = prompt(`Stock inicial de la carta para ${nombre}:`) || 0;
       consumeUnidades = prompt(`¿Cuánto stock descuenta de los hornos al pedirlo?\n(Ej: 1 para Pollo, 0.5 para Medio Pollo):`) || 1;
     }
+
+    // 2. Guardamos el producto con todos sus idiomas en Firebase
     await addDoc(collection(db, 'productos'), {
-      local: LOCAL_ID, nombre: nombre.toUpperCase(), precio: parseFloat(precio) || 0,
-      controlaStock: controlaStock, stockMaximo: parseInt(stock) || 0, consumeUnidades: parseFloat(consumeUnidades) || 0, activo: true
+      local: LOCAL_ID, 
+      nombre: nombre.toUpperCase(),
+      nombre_ca: nombreCa.toUpperCase(),
+      nombre_en: nombreEn.toUpperCase(),
+      nombre_fr: nombreFr.toUpperCase(),
+      precio: parseFloat(precio) || 0,
+      controlaStock: controlaStock, 
+      stockMaximo: parseInt(stock) || 0, 
+      consumeUnidades: parseFloat(consumeUnidades) || 0, 
+      activo: true
     });
   };
 
@@ -559,91 +598,125 @@ return (
 
        {vista === 'mostrador' && franjas.length > 0 && (   
      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 flex-1 min-h-0">
-     <section className="bg-white rounded-2xl p-5 shadow-sm border border-orange-100 flex flex-col overflow-hidden">
-            <h2 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4 shrink-0">📊 Estado de Carga</h2>
-            <div className="space-y-4 overflow-y-auto pr-2 flex-1 scrollbar-hide">
-{franjas.map((f) => {
-
-const reservados = obtenerReservadosPorFranja(f.hora);
-const faltaPollo = calcularAlertaFranja(f);
-const porcentaje = f.max > 0 ? (reservados / f.max) * 100 : 0;
-
-// RADAR DE OTROS PRODUCTOS
-const horaInicio = f.hora.split(' ')[0];
-const pedidosFranja = pedidosProcesados.filter(p => p.hora === horaInicio && p.cliente !== 'VENTA DIRECTA');
-const alertaSecundaria = chequearSobrecargaOtros(f, pedidosFranja);
-
-// NUEVO: CHIVATO INTELIGENTE DE EXTRAS (Busca cualquier patata o butifarra pendiente en esta franja)
-const tieneExtrasPendientes = pedidosFranja.some(p => 
-  !p.entregado && 
-  (p.detalle.toUpperCase().includes('PATATA') || p.detalle.toUpperCase().includes('BUTIFARRA') || p.detalle.toUpperCase().includes('CANELON'))
-);
-
-let colorBarra = "bg-emerald-500";
-let estiloFila = "bg-slate-50/60 border-slate-100";
-
-if (faltaPollo > 0) {
-  colorBarra = "bg-rose-500 animate-pulse";
-  estiloFila = "bg-rose-50 border-rose-200 ring-2 ring-rose-500/10";
-} else if (porcentaje >= 85) {
-  colorBarra = "bg-amber-500";
-  estiloFila = "bg-amber-50/50 border-amber-200";
-}
-
-return (
-<div 
-  key={f.id} 
-  onClick={() => { setFranjaDetalleSeleccionada(f); setModalDetalleFranjaAbierto(true); }}
-  className={`p-4 rounded-xl border flex flex-col gap-2 cursor-pointer hover:shadow-md hover:scale-[1.01] transition-all ${estiloFila}`}
->
-  <div className="flex justify-between items-center">
-    <div>
-            <div className="flex flex-col gap-1.5">
-        <div className="flex items-center gap-2">
-          <span className="font-black text-xl text-slate-800">{f.hora}</span>
-          {alertaSecundaria && <span className="animate-pulse bg-rose-600 text-white text-[10px] px-2 py-0.5 rounded-md font-black shadow-sm tracking-wider">⚠️ EXCESO STOCK</span>}
+  <section className="bg-white rounded-2xl p-5 shadow-sm border border-orange-100 flex flex-col overflow-hidden">
+  {tecladoBuscarAbierto ? (
+    /* --- NUEVO TECLADO DE BÚSQUEDA INTEGRADO --- */
+    <div className="flex flex-col h-full justify-between">
+      <div className="flex justify-between items-center mb-4 shrink-0 border-b-2 border-slate-100 pb-3">
+        <div>
+          <h2 className="text-xs font-black text-slate-400 uppercase tracking-wider">🔍 Buscador Activo</h2>
+          <p className="text-xl font-black text-indigo-600 mt-0.5">TEXTO: {busqueda || <span className="text-slate-300">VACÍO</span>}</p>
         </div>
-
-        {/* ZONA DE ALERTAS APILADAS Y ALINEADAS */}
-        <div className="flex flex-col gap-1">
-          {tieneExtrasPendientes && !alertaSecundaria && (
-            <div className="flex items-center gap-1 bg-indigo-500 text-white px-2 py-0.5 rounded-md text-[10px] font-black animate-pulse shadow-sm w-fit tracking-wider">
-              🍟 REVISAR EXTRAS
-            </div>
-          )}
-          
-          {/* AVISO DE PAELLAS PENDIENTES */}
-          {(() => {
-            const paellasEnFranja = pedidos.filter(p => p.hora === horaInicio && !p.entregado && p.detalle.toUpperCase().includes('PAELLA')).length;
-            return paellasEnFranja > 0 ? (
-              <div className="flex items-center gap-1 bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-md text-[10px] font-black animate-pulse shadow-sm w-fit">
-                🥘 {paellasEnFranja} PAELLA{paellasEnFranja > 1 ? 'S' : ''} PENDIENTE
-              </div>
-            ) : null;
-          })()}
+        <div className="flex gap-2">
+          <button onClick={() => setBusqueda('')} className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs px-3 py-2 rounded-xl border border-slate-300 cursor-pointer">
+            Limpiar
+          </button>
+          <button onClick={() => setTecladoBuscarAbierto(false)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-4 py-2 rounded-xl shadow-md border-b-4 border-emerald-800 cursor-pointer">
+            ✓ Ver Franjas
+          </button>
         </div>
       </div>
-      <span className="block text-xs font-bold text-slate-500 mt-1">
-        {reservados} / {f.max} pollos comprometidos
-      </span>
+      
+      {/* El teclado adaptado al tamaño compacto de la columna */}
+      <div className="flex-1 flex flex-col justify-center gap-2">
+        {filasTeclado.map((fila, fIdx) => (
+          <div key={fIdx} className="flex justify-center gap-1.5 h-12 w-full">
+            {fila.map((letra, lIdx) => {
+              let estiloLetra = "bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-lg rounded-xl flex-1 border-b-2 border-slate-300 active:scale-95 cursor-pointer flex items-center justify-center shadow-sm font-mono";
+              if (letra === '←') estiloLetra = "bg-rose-500 hover:bg-rose-600 text-white text-lg font-black flex-[1.5] rounded-xl border-b-2 border-rose-700 cursor-pointer flex items-center justify-center shadow-sm";
+              if (letra === ' ') estiloLetra = "bg-slate-400 hover:bg-slate-500 text-white font-black text-lg flex-[2.5] rounded-xl border-b-2 border-slate-600 cursor-pointer uppercase flex items-center justify-center shadow-sm";
+              return (
+                <button key={lIdx} type="button" onClick={() => handleTecladoBuscarPresionado(letra)} className={estiloLetra}>
+                  {letra}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  ) : (
+    /* --- EL CONTENIDO ORIGINAL DE LAS FRANJAS --- */
+    <>
+      <h2 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4 shrink-0">📊 Estado de Carga</h2>
+      <div className="space-y-4 overflow-y-auto pr-2 flex-1 scrollbar-hide">
+        {franjas.map((f) => {
+          const reservados = obtenerReservadosPorFranja(f.hora);
+          const faltaPollo = calcularAlertaFranja(f);
+          const porcentaje = f.max > 0 ? (reservados / f.max) * 100 : 0;
 
-</div>
-<button 
-onClick={(e) => { e.stopPropagation(); abrirModalCarga(f.id); }} 
-className="bg-white hover:bg-orange-50 text-orange-600 border border-orange-200 font-bold px-4 py-2 rounded-xl shadow-sm text-sm uppercase cursor-pointer z-10"
->
-⚙️ Cargar
-</button>
-</div>
-{faltaPollo > 0 && <div className="bg-rose-600 text-white font-black text-xs px-3 py-1.5 rounded-lg">🚨 FALTAN {faltaPollo} POLLOS</div>}
-<div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden shadow-inner mt-2">
-<div className={`h-3 rounded-full transition-all duration-300 ${colorBarra}`} style={{ width: `${Math.min(porcentaje, 100)}%` }}></div>
-</div>
-</div>
-);
+          const horaInicio = f.hora.split(' ')[0];
+          const pedidosFranja = pedidosProcesados.filter(p => p.hora === horaInicio && p.cliente !== 'VENTA DIRECTA');
+          const alertaSecundaria = chequearSobrecargaOtros(f, pedidosFranja);
 
-})}
-</div>
+          const tieneExtrasPendientes = pedidosFranja.some(p => 
+            !p.entregado && 
+            (p.detalle.toUpperCase().includes('PATATA') || p.detalle.toUpperCase().includes('BUTIFARRA') || p.detalle.toUpperCase().includes('CANELON'))
+          );
+
+          let colorBarra = "bg-emerald-500";
+          let estiloFila = "bg-slate-50/60 border-slate-100";
+
+          if (faltaPollo > 0) {
+            colorBarra = "bg-rose-500 animate-pulse";
+            estiloFila = "bg-rose-50 border-rose-200 ring-2 ring-rose-500/10";
+          } else if (porcentaje >= 85) {
+            colorBarra = "bg-amber-500";
+            estiloFila = "bg-amber-50/50 border-amber-200";
+          }
+
+          return (
+            <div 
+              key={f.id} 
+              onClick={() => { setFranjaDetalleSeleccionada(f); setModalDetalleFranjaAbierto(true); }}
+              className={`p-4 rounded-xl border flex flex-col gap-2 cursor-pointer hover:shadow-md hover:scale-[1.01] transition-all ${estiloFila}`}
+            >
+              <div className="flex justify-between items-center">
+                <div>
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-xl text-slate-800">{f.hora}</span>
+                      {alertaSecundaria && <span className="animate-pulse bg-rose-600 text-white text-[10px] px-2 py-0.5 rounded-md font-black shadow-sm tracking-wider">⚠️ LÍMITE EXTRAS SUPERADO</span>}
+                    </div>
+
+                    <div className="flex flex-col gap-1">
+                      {tieneExtrasPendientes && !alertaSecundaria && (
+                        <div className="flex items-center gap-1 bg-indigo-500 text-white px-2 py-0.5 rounded-md text-[10px] font-black animate-pulse shadow-sm w-fit tracking-wider">
+                          🍟 REVISAR EXTRAS
+                        </div>
+                      )}
+                      
+                      {(() => {
+                        const paellasEnFranja = pedidos.filter(p => p.hora === horaInicio && !p.entregado && p.detalle.toUpperCase().includes('PAELLA')).length;
+                        return paellasEnFranja > 0 ? (
+                          <div className="flex items-center gap-1 bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-md text-[10px] font-black animate-pulse shadow-sm w-fit">
+                            🥘 {paellasEnFranja} PAELLA{paellasEnFranja > 1 ? 'S' : ''} PENDIENTE
+                          </div>
+                        ) : null;
+                      })()}
+                    </div>
+                  </div>
+                  <span className="block text-xs font-bold text-slate-500 mt-1">
+                    {reservados} / {f.max} pollos comprometidos
+                  </span>
+                </div>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); abrirModalCarga(f.id); }} 
+                  className="bg-white hover:bg-orange-50 text-orange-600 border border-orange-200 font-bold px-4 py-2 rounded-xl shadow-sm text-sm uppercase cursor-pointer z-10"
+                >
+                  ⚙️ Cargar
+                </button>
+              </div>
+              {faltaPollo > 0 && <div className="bg-rose-600 text-white font-black text-xs px-3 py-1.5 rounded-lg">🚨 FALTAN {faltaPollo} POLLOS</div>}
+              <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden shadow-inner mt-2">
+                <div className={`h-3 rounded-full transition-all duration-300 ${colorBarra}`} style={{ width: `${Math.min(porcentaje, 100)}%` }}></div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
+  )}
 </section>
 
 <section className="bg-white rounded-2xl p-5 shadow-sm border border-orange-100 flex flex-col overflow-hidden">
@@ -662,7 +735,15 @@ return (
 <button onClick={() => setMostrarSoloPendientes(!mostrarSoloPendientes)} title={mostrarSoloPendientes ? 'Ver todos los pedidos' : 'Ver solo pendientes'} className={`w-12 h-12 shrink-0 flex items-center justify-center rounded-xl text-2xl border-2 transition-all cursor-pointer ${mostrarSoloPendientes ? 'bg-amber-100 border-amber-300' : 'bg-slate-100 border-slate-200 hover:bg-slate-200'}`}>
 {mostrarSoloPendientes ? '👀' : '👁️'}
 </button>
-<input type="text" placeholder="🔍 Buscar..." value={busqueda} onChange={(e) => setBusqueda(e.target.value.toUpperCase())} className="w-full md:w-48 bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-700 uppercase focus:outline-none focus:border-orange-500 placeholder:text-slate-400" />
+<input 
+  type="text" 
+  placeholder="🔍 Buscar..." 
+  value={busqueda} 
+  onChange={(e) => setBusqueda(e.target.value.toUpperCase())} 
+  onFocus={() => setTecladoBuscarAbierto(true)}
+  inputMode="none"
+  className="w-full md:w-48 bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-700 uppercase focus:outline-none focus:border-orange-500 placeholder:text-slate-400" 
+/>
 </div>
 </div>
 
@@ -1197,24 +1278,49 @@ return !(p.entregado && estaCobrado && !tieneFianzaRetenida);
         // 2. Filtramos pedidos desde el principio del día hasta esta hora (para el acumulado)
         const pedidosAcumulados = pedidos.filter(p => p.hora <= horaInicio);
 
-        // Motor de conteo de productos buscando dentro del texto del ticket
-        const contarProd = (lista, nombre) => {
-          let c = 0;
-          lista.forEach(p => {
-            if (p.historico) return; // IGNORAMOS TICKETS VIEJOS
-            const texto = p.detalle.includes('|') ? p.detalle.split('|')[1] : p.detalle;
-            texto.split('+').forEach(parte => {
-              const match = parte.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(.*)/i);
-              if (match && match[2].trim().toUpperCase() === nombre.toUpperCase()) {
-                c += parseFloat(match[1]);
-              }
-            });
+// Motor de conteo de productos buscando dentro del texto del ticket
+      const contarProd = (lista, nombre) => {
+        let c = 0;
+        lista.forEach(p => {
+          if (p.historico) return; // IGNORAMOS TICKETS VIEJOS
+          const texto = p.detalle.includes('|') ? p.detalle.split('|')[1] : p.detalle;
+          texto.split('+').forEach(parte => {
+            const match = parte.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(.*)/i);
+            if (match && match[2].trim().toUpperCase() === nombre.toUpperCase()) {
+              c += parseFloat(match[1]);
+            }
           });
-          return c;
-        };
+        });
+        return c;
+      };
+
+      // NUEVO: Agrupador inteligente de paellas por raciones
+      const obtenerDesglosePaellas = (lista) => {
+        const moldes = {};
+        lista.forEach(p => {
+          if (p.historico || p.entregado) return; // Solo contamos las que quedan por hacer
+          const texto = p.detalle.includes('|') ? p.detalle.split('|')[1] : p.detalle;
+          texto.split('+').forEach(parte => {
+            const match = parte.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(.*)/i);
+            if (match && match[2].trim().toUpperCase() === 'PAELLA') {
+              const raciones = parseInt(match[1]);
+              if (raciones > 0) {
+                moldes[raciones] = (moldes[raciones] || 0) + 1;
+              }
+            }
+          });
+        });
+
+        // Construye el texto visual: "2 de 2 pers, 1 de 4 pers"
+        const resultado = Object.entries(moldes)
+          .map(([raciones, cantidad]) => `${cantidad} de ${raciones}p`)
+          .join(', ');
+        
+        return resultado ? `(🍳 ${resultado})` : '';
+      };
 
 
-        const prodsConStock = productosOrdenados.filter(p => p.controlaStock);
+      const prodsConStock = productosOrdenados.filter(p => p.controlaStock);
         const prodsSinStock = productosOrdenados.filter(p => !p.controlaStock);
 
         // Emparejar nombre del producto con la capacidad configurada en la franja
@@ -1299,9 +1405,16 @@ return !(p.entregado && estaCobrado && !tieneFianzaRetenida);
                         // Ocultamos los productos que están a 0 en todo para que la lista no sea gigante e inútil
                         if(res === 0 && acum === 0) return null; 
 
-                        return (
+return (
                           <div key={p.id} className="grid grid-cols-4 p-4 items-center text-center font-mono font-bold text-lg hover:bg-slate-50 transition-colors">
-                            <div className="text-left font-black font-sans text-slate-800 uppercase">{p.nombre}</div>
+                            <div className="text-left font-black font-sans text-slate-800 uppercase flex flex-col gap-0.5">
+                              <span>{p.nombre}</span>
+                              {p.nombre.toUpperCase() === 'PAELLA' && (
+                                <span className="text-xs text-orange-600 font-black tracking-wide normal-case block bg-orange-50 px-2 py-0.5 rounded border border-orange-100 w-fit mt-0.5">
+                                  {obtenerDesglosePaellas(pedidosFranja)}
+                                </span>
+                              )}
+                            </div>
                             <div className="text-amber-600">{res}</div>
                             <div className="text-emerald-600">{ent}</div>
                             <div className="text-indigo-700 font-black bg-indigo-50 mx-auto px-6 py-1 rounded-lg border border-indigo-200">{acum}</div>
