@@ -28,6 +28,7 @@ tema: {
   // NUEVO: TRADUCCIONES DE LAS PARTES FIJAS DE LA WEB
   const TEXTOS = {
     es: {
+      subtitulo: "HAZ TU PEDIDO SIN COLAS",
       carta: "🍗 Nuestra Carta",
       noProductos: "El menú de hoy se está cargando o no hay productos configurados...",
       fianzaTitulo: "🥘 FIANZA DE PAELLERA",
@@ -49,6 +50,7 @@ tema: {
       errorConexion: "❌ Hubo un error de conexión. Inténtalo de nuevo."
     },
     ca: {
+      subtitulo: "FES LA TEVA COMANDA SENSE CUES",
       carta: "🍗 La Nostra Carta",
       noProductos: "El menú d'avui s'està carregant o no hi ha productes configurats...",
       fianzaTitulo: "🥘 FIANÇA DE PAELLERA",
@@ -70,6 +72,7 @@ tema: {
       errorConexion: "❌ Hi va haver un error de connexió. Torna-ho a intentar."
     },
     en: {
+      subtitulo: "ORDER WITHOUT QUEUING",
       carta: "🍗 Our Menu",
       noProductos: "Today's menu is loading or there are no items configured...",
       fianzaTitulo: "🥘 PAELLA PAN DEPOSIT",
@@ -91,6 +94,7 @@ tema: {
       errorConexion: "❌ Connection error. Please try again."
     },
     fr: {
+      subtitulo: "COMMANDEZ SANS ATTENTE",
       carta: "🍗 Notre Carte",
       noProductos: "Le menu d'aujourd'hui est en cours de chargement...",
       fianzaTitulo: "🥘 CAUTION CAUTÈRE À PAELLA",
@@ -112,16 +116,17 @@ tema: {
       errorConexion: "❌ Erreur de connexion. Veuillez réessayer."
     }
   };
-
-  export default function ClienteMenu() {
+export default function ClienteMenu() {
 
     const [idioma, setIdioma] = useState('es'); // <-- NUEVO ESTADO PARA EL IDIOMA
     const [franjas, setFranjas] = useState([]);
     const [productos, setProductos] = useState([]);
-  const [pedidos, setPedidos] = useState([]);
+    const [pedidos, setPedidos] = useState([]);
+    const [categorias, setCategorias] = useState([]); // <-- NUEVO: Guarda las categorías
+    const [categoriasAbiertas, setCategoriasAbiertas] = useState({}); // <-- NUEVO: Controla qué acordeón está abierto
   
-  // NUEVO: Un único carrito universal para todo
-  const [carrito, setCarrito] = useState({});
+    // NUEVO: Un único carrito universal para todo
+    const [carrito, setCarrito] = useState({});
   const [horaRecogida, setHoraRecogida] = useState('');
   const [nombreCliente, setNombreCliente] = useState('');
   const [pedidoConfirmado, setPedidoConfirmado] = useState(false);
@@ -136,9 +141,22 @@ tema: {
       setFranjas(franjasFb);
     });
 
-    const qProductos = query(collection(db, 'productos'), where('local', '==', LOCAL_ID));
+const qProductos = query(collection(db, 'productos'), where('local', '==', LOCAL_ID));
     const unsubscribeProductos = onSnapshot(qProductos, (snapshot) => {
       setProductos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
+    // NUEVO: ESCUCHAR CATEGORÍAS PARA LOS ACORDEONES
+    const qCategorias = query(collection(db, 'categorias'), where('local', '==', LOCAL_ID));
+    const unsubscribeCategorias = onSnapshot(qCategorias, (snapshot) => {
+      const catData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => a.nombre.localeCompare(b.nombre));
+      setCategorias(catData);
+      
+      // Iniciamos los acordeones abiertos por defecto la primera vez
+      const inicialAbiertas = {};
+      catData.forEach(c => inicialAbiertas[c.id] = false);
+      // Solo las forzamos abiertas si es la carga inicial para no molestar al usuario si ya cerró alguna
+      setCategoriasAbiertas(prev => Object.keys(prev).length === 0 ? inicialAbiertas : prev);
     });
 
     const qPedidos = query(collection(db, 'pedidos'), where('local', '==', LOCAL_ID));
@@ -153,9 +171,18 @@ tema: {
     return () => {
       unsubscribeFranjas();
       unsubscribeProductos();
+      unsubscribeCategorias(); // <-- NUEVO
       unsubscribePedidos();
     };
   }, []);
+
+  // NUEVO: FUNCIÓN PARA ABRIR/CERRAR ACORDEONES
+  const toggleCategoria = (catId) => {
+    setCategoriasAbiertas(prev => ({
+      ...prev,
+      [catId]: !prev[catId]
+    }));
+  };
 
   // --- LÓGICA DE STOCK Y CARRITO ---
   
@@ -379,8 +406,8 @@ return (
       )}
       <span className="truncate leading-none pt-1">{APP_CONFIG.nombre}</span>
     </h1>
-    <p className="text-slate-400 text-[10px] font-bold uppercase text-center tracking-wider mt-1.5">
-      {APP_CONFIG.subtitulo}
+<p className="text-slate-400 text-[10px] font-bold uppercase text-center tracking-wider mt-1.5">
+      {TEXTOS[idioma].subtitulo}
     </p>
 
     {/* NUEVO: ROW DE BOTONES DE IDIOMA COMPACTOS */}
@@ -394,43 +421,131 @@ return (
 </div>
 
       <main className="max-w-md mx-auto p-4 space-y-6">
-<section className="space-y-3">
+<section className="space-y-4">
           <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">
             {TEXTOS[idioma].carta}
           </h2>
-          
+
           {productos.length === 0 && (
-             <p className="text-slate-400 text-sm text-center bg-white p-4 rounded-xl border border-slate-200">
-               {TEXTOS[idioma].noProductos}
-             </p>
+            <p className="text-slate-400 text-sm text-center bg-white p-4 rounded-xl border border-slate-200">
+              {TEXTOS[idioma].noProductos}
+            </p>
           )}
 
-          {productos.map((plato) => {
-            const cantidad = carrito[plato.id] || 0;
-            // Selector inteligente de idioma con fallback al nombre original
-            const nombreTraducido = idioma === 'es' ? plato.nombre : (plato[`nombre_${idioma}`] || plato.nombre);
+          {/* ACORDEONES DE CATEGORÍAS */}
+          {categorias.map(cat => {
+            const productosCategoria = productos.filter(p => p.categoriaId === cat.id);
+            if (productosCategoria.length === 0) return null; // Ocultamos categorías vacías
+
+            const isOpen = categoriasAbiertas[cat.id];
+            const nombreCatTraducido = idioma === 'es' ? cat.nombre : (cat[`nombre_${idioma}`] || cat.nombre);
+            const itemsEnCarrito = productosCategoria.reduce((sum, p) => sum + (carrito[p.id] || 0), 0);
 
             return (
-              <div key={plato.id} className={`bg-white rounded-2xl p-4 border shadow-sm flex items-center justify-between gap-4 transition-all ${cantidad > 0 ? APP_CONFIG.tema.bordeOscuro : APP_CONFIG.tema.bordeClaro}`}>
-                <div className="flex-1">
-                  <h3 className="text-base font-black text-slate-800 leading-tight uppercase">{nombreTraducido}</h3>
-                  <span className={`text-sm font-black ${APP_CONFIG.tema.textoPrincipal} block mt-1`}>{parseFloat(plato.precio).toFixed(2)}€</span>
-                </div>
+              <div key={cat.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                {/* CABECERA */}
+                <button 
+                  onClick={() => toggleCategoria(cat.id)}
+                  className={`w-full flex items-center justify-between p-4 transition-colors cursor-pointer ${isOpen ? 'bg-slate-50 border-b border-slate-100' : 'hover:bg-slate-50'}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">{nombreCatTraducido}</h3>
+                    {itemsEnCarrito > 0 && (
+                      <span className={`${APP_CONFIG.tema.botonActivo} text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm`}>{itemsEnCarrito}</span>
+                    )}
+                  </div>
+                  <span className={`text-slate-400 font-black transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>▼</span>
+                </button>
 
-                <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl p-1 shadow-inner">
-                  {cantidad > 0 ? (
-                    <>
-                      <button onClick={() => handleModificarCarrito(plato.id, -1)} className="w-8 h-8 font-black text-slate-600 bg-white rounded-lg shadow-sm border border-slate-200 flex items-center justify-center active:scale-90 cursor-pointer">-</button>
-                      <span className="w-8 text-center font-bold font-mono text-slate-800 text-sm">{cantidad}</span>
-                      <button onClick={() => handleModificarCarrito(plato.id, 1)} className="w-8 h-8 font-black text-slate-600 bg-white rounded-lg shadow-sm border border-slate-200 flex items-center justify-center active:scale-90 cursor-pointer">+</button>
-                    </>
-                  ) : (
-                    <button onClick={() => handleModificarCarrito(plato.id, 1)} className="bg-slate-800 text-white font-black text-xs px-4 py-2.5 rounded-lg shadow-sm active:scale-95 transition-all cursor-pointer">AÑADIR</button>
-                  )}
-                </div>
+                {/* PRODUCTOS */}
+                {isOpen && (
+                  <div className="p-3 space-y-2 bg-slate-50/50">
+                    {productosCategoria.map(plato => {
+                      const cantidad = carrito[plato.id] || 0;
+                      const nombreTraducido = idioma === 'es' ? plato.nombre : (plato[`nombre_${idioma}`] || plato.nombre);
+
+                      return (
+                        <div key={plato.id} className={`bg-white rounded-xl p-3 border shadow-sm flex items-center justify-between gap-3 transition-all ${cantidad > 0 ? APP_CONFIG.tema.bordeOscuro : APP_CONFIG.tema.bordeClaro}`}>
+                          <div className="flex-1">
+                            <h4 className="text-sm font-black text-slate-800 leading-tight uppercase">{nombreTraducido}</h4>
+                            <span className={`text-sm font-black ${APP_CONFIG.tema.textoPrincipal} block mt-0.5`}>{parseFloat(plato.precio).toFixed(2)}€</span>
+                          </div>
+
+                          <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-1 shadow-inner shrink-0">
+                            {cantidad > 0 ? (
+                              <>
+                                <button onClick={() => handleModificarCarrito(plato.id, -1)} className="w-8 h-8 font-black text-slate-600 bg-white rounded-md shadow-sm border border-slate-200 flex items-center justify-center active:scale-90 cursor-pointer">-</button>
+                                <span className="w-8 text-center font-bold font-mono text-slate-800 text-sm">{cantidad}</span>
+                                <button onClick={() => handleModificarCarrito(plato.id, 1)} className="w-8 h-8 font-black text-slate-600 bg-white rounded-md shadow-sm border border-slate-200 flex items-center justify-center active:scale-90 cursor-pointer">+</button>
+                              </>
+                            ) : (
+                              <button onClick={() => handleModificarCarrito(plato.id, 1)} className="bg-slate-800 text-white font-black text-[10px] px-3 py-2.5 rounded-md shadow-sm active:scale-95 transition-all cursor-pointer">AÑADIR</button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
+
+          {/* PRODUCTOS SIN CATEGORÍA (Red de seguridad) */}
+          {(() => {
+            const productosSinCat = productos.filter(p => !p.categoriaId || !categorias.some(c => c.id === p.categoriaId));
+            if (productosSinCat.length === 0) return null;
+
+            const isOpen = categoriasAbiertas['sin-categoria'];
+            const itemsEnCarrito = productosSinCat.reduce((sum, p) => sum + (carrito[p.id] || 0), 0);
+
+            return (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mt-4">
+                <button 
+                  onClick={() => toggleCategoria('sin-categoria')}
+                  className={`w-full flex items-center justify-between p-4 transition-colors cursor-pointer ${isOpen ? 'bg-orange-50 border-b border-orange-100' : 'bg-slate-50 hover:bg-slate-100'}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-black text-slate-600 uppercase tracking-tight">Otras Especialidades</h3>
+                    {itemsEnCarrito > 0 && (
+                      <span className="bg-slate-800 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm">{itemsEnCarrito}</span>
+                    )}
+                  </div>
+                  <span className={`text-slate-400 font-black transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>▼</span>
+                </button>
+
+                {isOpen && (
+                  <div className="p-3 space-y-2 bg-slate-50/50">
+                    {productosSinCat.map(plato => {
+                      const cantidad = carrito[plato.id] || 0;
+                      const nombreTraducido = idioma === 'es' ? plato.nombre : (plato[`nombre_${idioma}`] || plato.nombre);
+
+                      return (
+                        <div key={plato.id} className={`bg-white rounded-xl p-3 border shadow-sm flex items-center justify-between gap-3 transition-all ${cantidad > 0 ? APP_CONFIG.tema.bordeOscuro : APP_CONFIG.tema.bordeClaro}`}>
+                          <div className="flex-1">
+                            <h4 className="text-sm font-black text-slate-800 leading-tight uppercase">{nombreTraducido}</h4>
+                            <span className={`text-sm font-black ${APP_CONFIG.tema.textoPrincipal} block mt-0.5`}>{parseFloat(plato.precio).toFixed(2)}€</span>
+                          </div>
+
+                          <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg p-1 shadow-inner shrink-0">
+                            {cantidad > 0 ? (
+                              <>
+                                <button onClick={() => handleModificarCarrito(plato.id, -1)} className="w-8 h-8 font-black text-slate-600 bg-white rounded-md shadow-sm border border-slate-200 flex items-center justify-center active:scale-90 cursor-pointer">-</button>
+                                <span className="w-8 text-center font-bold font-mono text-slate-800 text-sm">{cantidad}</span>
+                                <button onClick={() => handleModificarCarrito(plato.id, 1)} className="w-8 h-8 font-black text-slate-600 bg-white rounded-md shadow-sm border border-slate-200 flex items-center justify-center active:scale-90 cursor-pointer">+</button>
+                              </>
+                            ) : (
+                              <button onClick={() => handleModificarCarrito(plato.id, 1)} className="bg-slate-800 text-white font-black text-[10px] px-3 py-2.5 rounded-md shadow-sm active:scale-95 transition-all cursor-pointer">AÑADIR</button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </section>
 
  {tienePaella && (

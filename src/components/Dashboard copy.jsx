@@ -714,143 +714,141 @@ return (
           {/* CONTENEDOR DE SECCIONES */}
           <div className={`${modoLayout === 'SPLIT' ? 'grid grid-cols-1 xl:grid-cols-2 gap-6' : 'flex-1'} flex-1 min-h-0`}>
             
-{/* SECCIÓN HORNOS */}
-            <section className={`bg-white rounded-2xl p-5 shadow-sm border border-orange-100 flex flex-col overflow-hidden relative ${(modoLayout === 'FULL' && pantallaActiva !== 'HORNOS') ? 'hidden' : ''}`}>
-              <h2 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4 shrink-0">📊 Estado de Carga</h2>
-              
-              <div className="space-y-4 overflow-y-auto pr-2 flex-1 scrollbar-hide">
-                {franjas.map((f) => {
-                  const reservados = obtenerReservadosPorFranja(f.hora);
-                  const faltaPollo = calcularAlertaFranja(f);
-                  const porcentaje = f.max > 0 ? (reservados / f.max) * 100 : 0;
-                  const horaInicio = f.hora.split(' ')[0];
-                  const pedidosFranja = pedidosProcesados.filter(p => p.hora === horaInicio && p.cliente !== 'VENTA DIRECTA');
-                  const alertaSecundaria = chequearSobrecargaOtros(f, pedidosFranja);
-                  const tieneExtrasPendientes = pedidosFranja.some(p => !p.entregado && (p.detalle.toUpperCase().includes('PATATA') || p.detalle.toUpperCase().includes('BUTIFARRA') || p.detalle.toUpperCase().includes('CANELON')));
-                  let colorBarra = "bg-emerald-500";
-                  let estiloFila = "bg-slate-50/60 border-slate-100";
-                  if (faltaPollo > 0) { colorBarra = "bg-rose-500 animate-pulse"; estiloFila = "bg-rose-50 border-rose-200 ring-2 ring-rose-500/10"; } 
-                  else if (porcentaje >= 85) { colorBarra = "bg-amber-500"; estiloFila = "bg-amber-50/50 border-amber-200"; }
-                  return (
-                    <div key={f.id} onClick={() => { setFranjaDetalleSeleccionada(f); setModalDetalleFranjaAbierto(true); }} className={`p-4 rounded-xl border flex flex-col gap-2 cursor-pointer hover:shadow-md hover:scale-[1.01] transition-all ${estiloFila}`}>
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex items-center gap-2">
-                              <span className="font-black text-xl text-slate-800">{f.hora}</span>
-                              {alertaSecundaria && <span className="animate-pulse bg-rose-600 text-white text-[10px] px-2 py-0.5 rounded-md font-black shadow-sm tracking-wider">⚠️ LÍMITE EXTRAS SUPERADO</span>}
+            {/* SECCIÓN HORNOS */}
+            <section className={`bg-white rounded-2xl p-5 shadow-sm border border-orange-100 flex flex-col overflow-hidden ${(modoLayout === 'FULL' && pantallaActiva !== 'HORNOS') ? 'hidden' : ''}`}>
+              {tecladoBuscarAbierto ? (
+                 <div className="flex flex-col h-full justify-between">
+                   <div className="flex justify-between items-center mb-4 shrink-0 border-b-2 border-slate-100 pb-3">
+                     <div>
+                       <h2 className="text-xs font-black text-slate-400 uppercase tracking-wider">🔍 Buscador Activo</h2>
+                       <p className="text-xl font-black text-indigo-600 mt-0.5">TEXTO: {busqueda || <span className="text-slate-300">VACÍO</span>}</p>
+                     </div>
+                     <div className="flex gap-2">
+                       <button onClick={() => setBusqueda('')} className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs px-3 py-2 rounded-xl border border-slate-300 cursor-pointer">Limpiar</button>
+                       <button onClick={() => setTecladoBuscarAbierto(false)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-4 py-2 rounded-xl shadow-md border-b-4 border-emerald-800 cursor-pointer">✓ Ver Franjas</button>
+                     </div>
+                   </div>
+                   <div className="flex-1 flex flex-col justify-center gap-2">
+                     {filasTeclado.map((fila, fIdx) => (
+                       <div key={fIdx} className="flex justify-center gap-1.5 h-12 w-full">
+                         {fila.map((letra, lIdx) => {
+                           let estiloLetra = "bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-lg rounded-xl flex-1 border-b-2 border-slate-300 active:scale-95 cursor-pointer flex items-center justify-center shadow-sm font-mono";
+                           if (letra === '←') estiloLetra = "bg-rose-500 hover:bg-rose-600 text-white text-lg font-black flex-[1.5] rounded-xl border-b-2 border-rose-700 cursor-pointer flex items-center justify-center shadow-sm";
+                           if (letra === ' ') estiloLetra = "bg-slate-400 hover:bg-slate-500 text-white font-black text-lg flex-[2.5] rounded-xl border-b-2 border-slate-600 cursor-pointer uppercase flex items-center justify-center shadow-sm";
+                           return ( <button key={lIdx} type="button" onClick={() => handleTecladoBuscarPresionado(letra)} className={estiloLetra}>{letra}</button> );
+                         })}
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+              ) : (
+                <>
+                  <h2 className="text-sm font-black text-slate-400 uppercase tracking-wider mb-4 shrink-0">📊 Estado de Carga</h2>
+                  <div className="space-y-4 overflow-y-auto pr-2 flex-1 scrollbar-hide">
+                    {franjas.map((f) => {
+                      const reservados = obtenerReservadosPorFranja(f.hora);
+                      const faltaPollo = calcularAlertaFranja(f);
+                      const porcentaje = f.max > 0 ? (reservados / f.max) * 100 : 0;
+                      const horaInicio = f.hora.split(' ')[0];
+                      const pedidosFranja = pedidosProcesados.filter(p => p.hora === horaInicio && p.cliente !== 'VENTA DIRECTA');
+                      const alertaSecundaria = chequearSobrecargaOtros(f, pedidosFranja);
+                      const tieneExtrasPendientes = pedidosFranja.some(p => !p.entregado && (p.detalle.toUpperCase().includes('PATATA') || p.detalle.toUpperCase().includes('BUTIFARRA') || p.detalle.toUpperCase().includes('CANELON')));
+                      let colorBarra = "bg-emerald-500";
+                      let estiloFila = "bg-slate-50/60 border-slate-100";
+                      if (faltaPollo > 0) { colorBarra = "bg-rose-500 animate-pulse"; estiloFila = "bg-rose-50 border-rose-200 ring-2 ring-rose-500/10"; } 
+                      else if (porcentaje >= 85) { colorBarra = "bg-amber-500"; estiloFila = "bg-amber-50/50 border-amber-200"; }
+                      return (
+                        <div key={f.id} onClick={() => { setFranjaDetalleSeleccionada(f); setModalDetalleFranjaAbierto(true); }} className={`p-4 rounded-xl border flex flex-col gap-2 cursor-pointer hover:shadow-md hover:scale-[1.01] transition-all ${estiloFila}`}>
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <div className="flex flex-col gap-1.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-black text-xl text-slate-800">{f.hora}</span>
+                                  {alertaSecundaria && <span className="animate-pulse bg-rose-600 text-white text-[10px] px-2 py-0.5 rounded-md font-black shadow-sm tracking-wider">⚠️ LÍMITE EXTRAS SUPERADO</span>}
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                  {tieneExtrasPendientes && !alertaSecundaria && <div className="flex items-center gap-1 bg-indigo-500 text-white px-2 py-0.5 rounded-md text-[10px] font-black animate-pulse shadow-sm w-fit tracking-wider">🍟 REVISAR EXTRAS</div>}
+                                </div>
+                              </div>
+                              <span className="block text-xs font-bold text-slate-500 mt-1">{reservados} / {f.max} pollos comprometidos</span>
                             </div>
-                            <div className="flex flex-col gap-1">
-                              {tieneExtrasPendientes && !alertaSecundaria && <div className="flex items-center gap-1 bg-indigo-500 text-white px-2 py-0.5 rounded-md text-[10px] font-black animate-pulse shadow-sm w-fit tracking-wider">🍟 REVISAR EXTRAS</div>}
-                            </div>
+                            <button onClick={(e) => { e.stopPropagation(); abrirModalCarga(f.id); }} className="bg-white hover:bg-orange-50 text-orange-600 border border-orange-200 font-bold px-4 py-2 rounded-xl shadow-sm text-sm uppercase cursor-pointer z-10">⚙️ Cargar</button>
                           </div>
-                          <span className="block text-xs font-bold text-slate-500 mt-1">{reservados} / {f.max} pollos comprometidos</span>
+                          <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden shadow-inner mt-2">
+                            <div className={`h-3 rounded-full transition-all duration-300 ${colorBarra}`} style={{ width: `${Math.min(porcentaje, 100)}%` }}></div>
+                          </div>
                         </div>
-                        <button onClick={(e) => { e.stopPropagation(); abrirModalCarga(f.id); }} className="bg-white hover:bg-orange-50 text-orange-600 border border-orange-200 font-bold px-4 py-2 rounded-xl shadow-sm text-sm uppercase cursor-pointer z-10">⚙️ Cargar</button>
-                      </div>
-                      <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden shadow-inner mt-2">
-                        <div className={`h-3 rounded-full transition-all duration-300 ${colorBarra}`} style={{ width: `${Math.min(porcentaje, 100)}%` }}></div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* TECLADO EN HORNOS (Solo SPLIT + BUSCANDO) */}
-              {modoLayout === 'SPLIT' && tecladoBuscarAbierto && (
-                <div className="absolute inset-0 bg-white z-50 p-6 flex flex-col gap-2 border-4 border-slate-300">
-                  <div className="flex justify-between items-center mb-2">
-                    <h3 className="font-black text-slate-800 uppercase text-lg">⌨️ BUSCANDO: {busqueda}</h3>
-                    <button onClick={() => { setTecladoBuscarAbierto(false); setBusqueda(''); }} className="bg-rose-500 text-white font-black px-6 py-2 rounded-xl">CERRAR</button>
+                      );
+                    })}
                   </div>
-                  {filasTeclado.map((fila, fIdx) => (
-                    <div key={fIdx} className="flex gap-2 h-16 w-full">
-                      {fila.map((letra, lIdx) => (
-                        <button key={lIdx} type="button" onClick={() => handleTecladoBuscarPresionado(letra)} 
-                          className={`flex-1 font-black rounded-xl text-2xl ${letra === '←' ? 'bg-rose-500 text-white' : 'bg-slate-200 hover:bg-slate-300'} active:scale-95 cursor-pointer`}>
-                          {letra}
-                        </button>
-                      ))}
-                    </div>
-                  ))}
-                </div>
+                </>
               )}
             </section>
 
-{/* SECCIÓN PEDIDOS */}
+            {/* SECCIÓN PEDIDOS */}
             <section className={`bg-white rounded-2xl p-5 shadow-sm border border-orange-100 flex flex-col overflow-hidden ${(modoLayout === 'FULL' && pantallaActiva !== 'PEDIDOS') ? 'hidden' : ''}`}>
-              
-              {/* FILTROS Y BUSCADOR */}
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 border-b-2 border-slate-100 pb-4 shrink-0">
                 <div className="flex flex-wrap gap-2 w-full">
                   <button onClick={() => setFiltroHora('Todos')} className={`flex-1 py-3 rounded-xl text-xs font-black uppercase border-2 transition-all cursor-pointer ${filtroHora === 'Todos' ? 'bg-slate-800 text-white border-slate-800' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}>Todos</button>
                   {franjas.map(f => { const h = f.hora.split(' ')[0]; return <button key={f.id} onClick={() => setFiltroHora(h)} className={`flex-1 py-3 rounded-xl text-xs font-black border-2 transition-all cursor-pointer ${filtroHora === h ? 'bg-orange-600 text-white border-orange-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}>{h}</button> })}
                 </div>
                 <div className="w-full md:w-auto shrink-0 flex gap-2">
-                  <button onClick={() => setMostrarSoloPendientes(!mostrarSoloPendientes)} className={`w-12 h-12 shrink-0 flex items-center justify-center rounded-xl text-2xl border-2 transition-all cursor-pointer ${mostrarSoloPendientes ? 'bg-amber-100 border-amber-300' : 'bg-slate-100 border-slate-200'}`}>
-                    {mostrarSoloPendientes ? '👀' : '👁️'}
-                  </button>
+                  <button onClick={() => setMostrarSoloPendientes(!mostrarSoloPendientes)} title={mostrarSoloPendientes ? 'Ver todos los pedidos' : 'Ver solo pendientes'} className={`w-12 h-12 shrink-0 flex items-center justify-center rounded-xl text-2xl border-2 transition-all cursor-pointer ${mostrarSoloPendientes ? 'bg-amber-100 border-amber-300' : 'bg-slate-100 border-slate-200 hover:bg-slate-200'}`}>{mostrarSoloPendientes ? '👀' : '👁️'}</button>
                   <div className="relative w-full md:w-48">
-                    <input type="text" placeholder="🔍 BUSCAR..." value={busqueda} onChange={(e) => setBusqueda(e.target.value.toUpperCase())} onFocus={() => setTecladoBuscarAbierto(true)} inputMode="none" className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-700 uppercase focus:outline-none focus:border-orange-500 pr-10" />
-                    {busqueda && <button onClick={(e) => { e.stopPropagation(); setBusqueda(''); setTecladoBuscarAbierto(false); }} className="absolute right-3 top-3.5 text-rose-500 font-black cursor-pointer">✕</button>}
+                    <input type="text" placeholder="🔍 Buscar..." value={busqueda} onChange={(e) => setBusqueda(e.target.value.toUpperCase())} onFocus={() => setTecladoBuscarAbierto(true)} inputMode="none" className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-700 uppercase focus:outline-none focus:border-orange-500 placeholder:text-slate-400 pr-10" />
+                    {busqueda && <button onClick={(e) => { e.stopPropagation(); setBusqueda(''); }} className="absolute right-3 top-3.5 text-rose-500 font-black cursor-pointer hover:scale-110">✕</button>}
                   </div>
                 </div>
               </div>
-
-              {/* LISTA DE PEDIDOS Y TECLADO (Flexbox dinámico) */}
-              <div className="flex-1 flex overflow-hidden gap-4">
-                
-                {/* LISTA DE PEDIDOS - Siempre presente, se ajusta automáticamente */}
-                <div className={`overflow-y-auto pr-2 scrollbar-hide space-y-3 transition-all duration-300 ${tecladoBuscarAbierto ? (modoLayout === 'FULL' ? 'w-1/2' : 'w-full') : 'w-full'}`}>
-                  {pedidosProcesados
-                    .filter(p => filtroHora === 'Todos' ? true : p.hora === filtroHora)
-                    .filter(p => busqueda === '' ? true : p.cliente.toUpperCase().includes(busqueda))
-                    .filter(p => { if (!mostrarSoloPendientes) return true; const esVentaDirecta = p.cliente === 'VENTA DIRECTA'; return !(p.entregado && (p.cobrado || esVentaDirecta) && p.fianza !== 'retenida'); })
-                    .map((p) => {
-                      const esVentaDirecta = p.cliente === 'VENTA DIRECTA';
-                      const estaCobrado = p.cobrado || esVentaDirecta;
-                      const fianzaRetenida = p.fianza === 'retenida';
-                      const tienePaella = p.detalle.toUpperCase().includes('PAELLA');
-                      let estiloTarjeta = 'bg-amber-50/40 border-amber-200';
-                      if (tienePaella && !p.entregado) estiloTarjeta = 'bg-yellow-50 border-yellow-400 ring-2 ring-yellow-400/60';
-                      else if (p.entregado && !estaCobrado) estiloTarjeta = 'bg-rose-50 border-rose-300 ring-2 ring-rose-500/50';
-                      else if (p.entregado && estaCobrado && fianzaRetenida) estiloTarjeta = 'bg-orange-50 border-orange-400 ring-2 ring-orange-500/40';
-                      else if (p.entregado && estaCobrado && !fianzaRetenida) estiloTarjeta = 'bg-slate-50 border-slate-200 opacity-55';
-                      
-                      return (
-                        <div key={p.id} onClick={() => { if(!esVentaDirecta) setPedidoSeleccionado(p) }} className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer ${esVentaDirecta ? 'cursor-default' : 'hover:scale-[1.01]'} ${estiloTarjeta}`}>
-                          <div className="flex flex-col gap-0.5 w-full">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-black font-mono text-orange-600 bg-white px-2 py-0.5 rounded border">{p.hora}</span>
-                                <span className="text-sm font-black text-slate-800 uppercase truncate">{p.cliente}</span>
-                              </div>
-                              <p className="text-[11px] font-bold text-slate-600 truncate">{p.detalle}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
+<div className="flex-1 flex overflow-hidden">
+  {/* LADO IZQUIERDO: LISTA */}
+  <div className={`overflow-y-auto pr-2 scrollbar-hide ${modoLayout === 'FULL' && tecladoBuscarAbierto ? 'w-1/2' : 'w-full'} space-y-3`}>
+    {pedidosProcesados
+      .filter(p => filtroHora === 'Todos' ? true : p.hora === filtroHora)
+      .filter(p => busqueda === '' ? true : p.cliente.includes(busqueda))
+      .filter(p => { if (!mostrarSoloPendientes) return true; const esVentaDirecta = p.cliente === 'VENTA DIRECTA'; return !(p.entregado && (p.cobrado || esVentaDirecta) && p.fianza !== 'retenida'); })
+      .map((p) => {
+        const esVentaDirecta = p.cliente === 'VENTA DIRECTA';
+        const estaCobrado = p.cobrado || esVentaDirecta;
+        const fianzaRetenida = p.fianza === 'retenida';
+        const tienePaella = p.detalle.toUpperCase().includes('PAELLA');
+        let estiloTarjeta = 'bg-amber-50/40 border-amber-200 shadow-sm';
+        if (tienePaella && !p.entregado) estiloTarjeta = 'bg-yellow-50 border-yellow-400 shadow-md ring-2 ring-yellow-400/60';
+        else if (p.entregado && !estaCobrado) estiloTarjeta = 'bg-rose-50 border-rose-300 shadow-sm ring-2 ring-rose-500/50';
+        else if (p.entregado && estaCobrado && fianzaRetenida) estiloTarjeta = 'bg-orange-50 border-orange-400 shadow-md ring-2 ring-orange-500/40';
+        else if (p.entregado && estaCobrado && !fianzaRetenida) estiloTarjeta = 'bg-slate-50 border-slate-200 opacity-55';
+        
+        return (
+          <div key={p.id} onClick={() => { if(!esVentaDirecta) setPedidoSeleccionado(p) }} className={`p-3 rounded-xl border flex flex-row items-center justify-between gap-3 cursor-pointer ${estiloTarjeta}`}>
+             <div className="flex flex-col gap-1 w-full">
+                <div className="flex items-center gap-2">
+                   <span className="text-lg font-black font-mono text-orange-600 bg-white px-2 rounded-lg border">{p.hora}</span>
+                   <span className="text-md font-black text-slate-800 uppercase truncate">{p.cliente}</span>
                 </div>
+                <p className="text-xs font-bold text-slate-600 truncate">{p.detalle}</p>
+             </div>
+          </div>
+        );
+      })}
+  </div>
 
-{/* TECLADO DERECHO (Solo en FULL) */}
-                {tecladoBuscarAbierto && modoLayout === 'FULL' && (
-                  <div className={`${modoLayout === 'FULL' ? 'w-1/2 border-l-2 border-slate-200 pl-4' : 'w-full'} flex flex-col gap-2 shrink-0`}>
-                    <div className="flex justify-between items-center mb-1">
-                      <h3 className="font-black text-slate-400 uppercase text-[10px]">⌨️ BUSCANDO: {busqueda}</h3>
-                      <button onClick={() => setTecladoBuscarAbierto(false)} className="text-[10px] font-bold text-rose-500 hover:text-rose-600 cursor-pointer">CERRAR</button>
-                    </div>
-                    {filasTeclado.map((fila, fIdx) => (
-                      <div key={fIdx} className="flex gap-1.5 h-12 w-full">
-                        {fila.map((letra, lIdx) => (
-                          <button key={lIdx} type="button" onClick={() => handleTecladoBuscarPresionado(letra)} 
-                            className={`flex-1 font-black rounded-lg text-lg ${letra === '←' ? 'bg-rose-500 text-white' : 'bg-slate-200 hover:bg-slate-300'} active:scale-95 cursor-pointer`}>
-                            {letra}
-                          </button>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+  {/* LADO DERECHO: TECLADO (Solo si estamos en FULL y buscando) */}
+  {modoLayout === 'FULL' && tecladoBuscarAbierto && (
+    <div className="w-1/2 pl-4 border-l-2 border-slate-200 flex flex-col gap-2">
+      <h3 className="font-black text-slate-400 uppercase text-xs">⌨️ Teclado Rápido</h3>
+      {filasTeclado.map((fila, fIdx) => (
+        <div key={fIdx} className="flex gap-1.5 h-12">
+          {fila.map((letra, lIdx) => (
+            <button key={lIdx} type="button" onClick={() => handleTecladoBuscarPresionado(letra)} 
+              className={`flex-1 font-black rounded-lg ${letra === '←' ? 'bg-rose-500 text-white' : 'bg-slate-200'} active:scale-95`}>
+              {letra}
+            </button>
+          ))}
+        </div>
+      ))}
+    </div>
+  )}
+</div>
             </section>
           </div>
         </div>
