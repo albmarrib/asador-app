@@ -6,12 +6,12 @@ import { getAuth } from "firebase/auth";
 
 // Las credenciales exactas de tu proyecto 'asador-saas'
 const firebaseConfig = {
-  apiKey: "AIzaSyB0Xf_8lP3xLtovLaglbhEYuzCxC6AwYLA",
-  authDomain: "asador-saas.firebaseapp.com",
-  projectId: "asador-saas",
-  storageBucket: "asador-saas.firebasestorage.app",
-  messagingSenderId: "1004904380675",
-  appId: "1:1004904380675:web:34ebce379eb2ccd0cf9136"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 // 1. Despertamos a Firebase con tu configuración

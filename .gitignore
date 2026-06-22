@@ -23,3 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+# Archivos de entorno locales (credenciales)
+.env
+.env.development
+.env.production
+.env.local
