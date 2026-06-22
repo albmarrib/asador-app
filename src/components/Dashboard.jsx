@@ -55,6 +55,7 @@ const [filtroProductoEstat, setFiltroProductoEstat] = useState('TODOS');
   const [horaSeleccionada, setHoraSeleccionada] = useState('');
   const [errorValidacion, setErrorValidacion] = useState('');
   const [origenReservaManual, setOrigenReservaManual] = useState('TIENDA'); // <-- NUEVO ESTADO
+  const [reservaPrePagada, setReservaPrePagada] = useState(false);
 
   // ESTADOS CARRITO VENTA DIRECTA (TPV)
   const [vdCarritoExtras, setVdCarritoExtras] = useState({});
@@ -182,9 +183,9 @@ const qProductos = query(collection(db, 'productos'), where('local', '==', LOCAL
     return totales;
   };
 
-
-  const capacidadTotal = franjas.reduce((acc, f) => acc + f.max, 0);
-  const totalReservados = pedidos.filter(p => !p.entregado).reduce((sum, p) => sum + extraerUnidades(p.detalle), 0);
+const capacidadTotal = franjas.reduce((acc, f) => acc + f.max, 0);
+  // Cuentan TODOS los pedidos de hoy (los pendientes, los ya entregados y la venta directa)
+  const totalReservados = pedidos.filter(p => !p.historico).reduce((sum, p) => sum + extraerUnidades(p.detalle), 0);
   const totalDisponibles = Math.max(capacidadTotal - totalReservados, 0);
 
   const obtenerFranjaActualEnCurso = () => {
@@ -314,7 +315,8 @@ const handleEntregar = async (id) => {
 const handleAbrirNuevaReserva = () => {
     setNombreCliente(''); setCarritoExtras({}); 
     setHoraSeleccionada(franjas.length > 0 ? franjas[0].hora.split(' ')[0] : '');
-    setOrigenReservaManual('TIENDA'); // <-- RESETEA A TIENDA
+    setOrigenReservaManual('TIENDA'); 
+    setReservaPrePagada(false); // <-- RESETEA EL ESTADO DE PAGO
     setErrorValidacion(''); setModalAbierto(true); setTecladoPantallaCompleta(false);
   };
 
@@ -395,7 +397,7 @@ await addDoc(collection(db, 'pedidos'), {
     hora: horaSeleccionada,
     detalle: detalleTexto, 
     entregado: false, 
-    cobrado: false,
+    cobrado: reservaPrePagada, // <-- AHORA DEPENDE DEL BOTÓN DE PRE-PAGO
     fianza: llevaPaella ? 'pendiente' : null,
     origen: origenReservaManual, // <-- AQUÍ USAMOS EL ESTADO SELECCIONADO
     creadoEn: new Date()
@@ -621,29 +623,55 @@ const handleCrearProductoNuevo = async () => {
     await updateDoc(doc(db, 'productos', producto.id), { stockMaximo: nuevoStock });
   };
 
+  const handleMoverProducto = async (producto, direccion) => {
+    // Buscamos la posición actual del producto en nuestra lista ordenada
+    const indexActual = productosOrdenados.findIndex(p => p.id === producto.id);
+    if (indexActual === -1) return;
+
+    // Calculamos la posición de destino
+    const indexDestino = direccion === 'SUBIR' ? indexActual - 1 : indexActual + 1;
+
+    // Si intenta subir el primero o bajar el último, no hacemos nada
+    if (indexDestino < 0 || indexDestino >= productosOrdenados.length) return;
+
+    const productoVecino = productosOrdenados[indexDestino];
+
+    // Calculamos los números de orden actuales (si no tienen, usamos su índice)
+    const ordenActual = producto.orden !== undefined ? producto.orden : indexActual;
+    const ordenVecino = productoVecino.orden !== undefined ? productoVecino.orden : indexDestino;
+
+    // Intercambiamos los papeles
+    let nuevoOrdenActual = ordenVecino;
+    let nuevoOrdenVecino = ordenActual;
+
+    // Corrección por si ambos fuesen iguales (productos nuevos sin ordenar)
+    if (nuevoOrdenActual === nuevoOrdenVecino) {
+      nuevoOrdenActual = indexDestino;
+      nuevoOrdenVecino = indexActual;
+    }
+
+    // Guardamos los dos cambios en Firebase de golpe
+    await updateDoc(doc(db, 'productos', producto.id), { orden: nuevoOrdenActual });
+    await updateDoc(doc(db, 'productos', productoVecino.id), { orden: nuevoOrdenVecino });
+  };
+
   const pedidosProcesados = [...pedidos].sort((a, b) => {
     if (a.entregado && !b.entregado) return 1;
     if (!a.entregado && b.entregado) return -1;
     return a.hora.localeCompare(b.hora);
   });
 
-  // --- ORDENACIÓN DE LA CARTA CON PRIORIDAD ABSOLUTA AL POLLO ENTERO ---
+// --- ORDENACIÓN DE LA CARTA PERSONALIZABLE ---
   const productosOrdenados = [...productos].sort((a, b) => {
-    const nomA = a.nombre.toUpperCase();
-    const nomB = b.nombre.toUpperCase();
-
-    // 1. Si uno es "POLLO" a secas, va el primero de todos
-    if (nomA === 'POLLO' && nomB !== 'POLLO') return -1;
-    if (nomB === 'POLLO' && nomA !== 'POLLO') return 1;
-
-    // 2. Si uno contiene "POLLO" (como Medio Pollo) pero el otro no, va antes
-    const tienePolloA = nomA.includes('POLLO');
-    const tienePolloB = nomB.includes('POLLO');
-    if (tienePolloA && !tienePolloB) return -1;
-    if (!tienePolloA && tienePolloB) return 1;
-
-    // 3. Para el resto de productos (patatas, canelones...), orden alfabético normal
-    return nomA.localeCompare(nomB);
+    // Si no tienen número de orden (productos antiguos), les damos un 999 para que vayan al final
+    const ordenA = a.orden !== undefined ? a.orden : 999;
+    const ordenB = b.orden !== undefined ? b.orden : 999;
+    
+    // Primero ordenamos por su número
+    if (ordenA !== ordenB) return ordenA - ordenB;
+    
+    // Si tienen el mismo número (o no tienen), desempata por orden alfabético
+    return a.nombre.localeCompare(b.nombre);
   });
 return (
 <div className={`fixed inset-0 overflow-hidden overscroll-none flex flex-col ${APP_CONFIG.tema.fondoBase} text-slate-800 p-4 md:p-6 font-sans antialiased`}>
@@ -823,6 +851,7 @@ return (
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-black font-mono text-orange-600 bg-white px-2 py-0.5 rounded border">{p.hora}</span>
                                 <span className="text-sm font-black text-slate-800 uppercase truncate">{p.cliente}</span>
+                                {estaCobrado && !p.entregado && <span className="text-[9px] font-black bg-emerald-500 text-white px-2 py-0.5 rounded shadow-sm tracking-widest shrink-0">PAGADO</span>}
                               </div>
                               <p className="text-[11px] font-bold text-slate-600 truncate">{p.detalle}</p>
                           </div>
@@ -998,7 +1027,11 @@ return (
                 ) : (
                   <div className="bg-emerald-50 border border-emerald-200 px-4 py-2 rounded-xl text-center"><span className="text-emerald-600 font-black text-xs uppercase tracking-wider">Stock Ilimitado</span></div>
 )}
-                <div className="flex gap-2">
+<div className="flex gap-1">
+                  <div className="flex flex-col gap-1 mr-2">
+                    <button onClick={() => handleMoverProducto(p, 'SUBIR')} className="text-slate-500 bg-slate-100 w-8 h-6 rounded font-black text-xs hover:bg-slate-200 cursor-pointer">▲</button>
+                    <button onClick={() => handleMoverProducto(p, 'BAJAR')} className="text-slate-500 bg-slate-100 w-8 h-6 rounded font-black text-xs hover:bg-slate-200 cursor-pointer">▼</button>
+                  </div>
                   <button onClick={() => handleEditarProducto(p)} className="text-indigo-600 bg-indigo-50 px-3 py-2 rounded-lg font-bold text-xs uppercase border border-indigo-100 cursor-pointer hover:bg-indigo-100 transition-colors">✏️ Editar</button>
                   <button onClick={() => handleBorrarProductoConfig(p.id)} className="text-rose-500 bg-rose-50 px-3 py-2 rounded-lg font-bold text-xs uppercase border border-rose-100 cursor-pointer hover:bg-rose-100 transition-colors">🗑 Borrar</button>
                 </div>
@@ -1255,8 +1288,35 @@ return (
                       📞 POR TELÉFONO
                     </button>
                   </div>
+{(() => {
+                    // Calculamos los euros del carrito en tiempo real
+                    const totalReserva = Object.entries(carritoExtras).reduce((sum, [prodId, cant]) => {
+                      const prod = productos.find(p => p.id === prodId);
+                      return sum + (prod ? prod.precio * cant : 0);
+                    }, 0);
 
-                  <button type="button" onClick={handleGuardarPedido} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-5 rounded-2xl uppercase text-3xl shadow-xl transition-colors border-b-8 border-emerald-800 cursor-pointer">💾 Confirmar Reserva</button>
+                    return (
+                      <>
+                        <div className="flex gap-4">
+                          <div className="bg-slate-100 border-4 border-slate-200 rounded-2xl px-6 flex flex-col items-center justify-center shrink-0 w-1/3">
+                            <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Total Reserva</span>
+                            <span className="text-4xl font-mono font-black text-slate-800">{totalReserva.toFixed(2)}€</span>
+                          </div>
+                          <button 
+                            type="button" 
+                            onClick={() => setReservaPrePagada(!reservaPrePagada)}
+                            className={`flex-1 font-black py-4 rounded-2xl uppercase text-2xl border-4 transition-all cursor-pointer shadow-sm flex flex-col items-center justify-center gap-1 ${reservaPrePagada ? 'bg-emerald-100 text-emerald-800 border-emerald-400 scale-[1.02]' : 'bg-white text-slate-400 border-slate-300 hover:bg-slate-50'}`}
+                          >
+                            <span>{reservaPrePagada ? '✅ PAGADO EN MOSTRADOR' : '⏳ PAGO EN RECOGIDA'}</span>
+                            <span className="text-[10px] font-bold tracking-widest opacity-80">{reservaPrePagada ? '(Se marcará como cobrado directo)' : '(Se cobrará al entregar)'}</span>
+                          </button>
+                        </div>
+
+                        <button type="button" onClick={handleGuardarPedido} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-5 rounded-2xl uppercase text-3xl shadow-xl transition-colors border-b-8 border-emerald-800 cursor-pointer">💾 Confirmar Reserva</button>
+                      </>
+                    );
+                  })()}
+
                 </div>
               </div>
             </div>
@@ -1334,6 +1394,15 @@ return (
                 ⚠️ Entregar en mano ahora, pero dejar PENDIENTE DE PAGO
               </button>
             )}
+          </div>
+        )}
+{/* NUEVO CASO: PRE-PAGO (ESTÁ PAGADO PERO NO ENTREGADO) */}
+        {pedidoSeleccionado.cobrado && !pedidoSeleccionado.entregado && (
+          <div className="bg-emerald-50 border-4 border-emerald-200 p-5 rounded-2xl flex flex-col gap-4 shadow-inner">
+            <span className="text-emerald-700 font-black uppercase text-center text-lg">✅ PEDIDO ABONADO POR ADELANTADO</span>
+            <button onClick={() => { handleEntregar(pedidoSeleccionado.id); setPedidoSeleccionado(null); }} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-black py-5 rounded-2xl uppercase text-2xl shadow-xl border-b-8 border-emerald-700 cursor-pointer active:scale-95 transition-all">
+              📦 ENTREGAR PEDIDO
+            </button>
           </div>
         )}
 

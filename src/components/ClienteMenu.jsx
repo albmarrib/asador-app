@@ -176,6 +176,14 @@ const qProductos = query(collection(db, 'productos'), where('local', '==', LOCAL
     };
   }, []);
 
+// --- ORDENACIÓN DE LA CARTA PARA EL CLIENTE ---
+  const productosOrdenados = [...productos].sort((a, b) => {
+    const ordenA = a.orden !== undefined ? a.orden : 999;
+    const ordenB = b.orden !== undefined ? b.orden : 999;
+    if (ordenA !== ordenB) return ordenA - ordenB;
+    return a.nombre.localeCompare(b.nombre);
+  });
+
   // NUEVO: FUNCIÓN PARA ABRIR/CERRAR ACORDEONES
   const toggleCategoria = (catId) => {
     setCategoriasAbiertas(prev => ({
@@ -434,8 +442,8 @@ return (
 
           {/* ACORDEONES DE CATEGORÍAS */}
           {categorias.map(cat => {
-            const productosCategoria = productos.filter(p => p.categoriaId === cat.id);
-            if (productosCategoria.length === 0) return null; // Ocultamos categorías vacías
+          const productosCategoria = productosOrdenados.filter(p => p.categoriaId === cat.id);
+          if (productosCategoria.length === 0) return null; // Ocultamos categorías vacías
 
             const isOpen = categoriasAbiertas[cat.id];
             const nombreCatTraducido = idioma === 'es' ? cat.nombre : (cat[`nombre_${idioma}`] || cat.nombre);
@@ -493,7 +501,7 @@ return (
 
           {/* PRODUCTOS SIN CATEGORÍA (Red de seguridad) */}
           {(() => {
-            const productosSinCat = productos.filter(p => !p.categoriaId || !categorias.some(c => c.id === p.categoriaId));
+            const productosSinCat = productosOrdenados.filter(p => !p.categoriaId || !categorias.some(c => c.id === p.categoriaId));
             if (productosSinCat.length === 0) return null;
 
             const isOpen = categoriasAbiertas['sin-categoria'];
