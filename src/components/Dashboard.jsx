@@ -623,36 +623,25 @@ const handleCrearProductoNuevo = async () => {
     await updateDoc(doc(db, 'productos', producto.id), { stockMaximo: nuevoStock });
   };
 
-  const handleMoverProducto = async (producto, direccion) => {
-    // Buscamos la posición actual del producto en nuestra lista ordenada
+const handleMoverProducto = async (producto, direccion) => {
+    // 1. Buscamos los índices actuales en la lista YA ORDENADA
     const indexActual = productosOrdenados.findIndex(p => p.id === producto.id);
-    if (indexActual === -1) return;
-
-    // Calculamos la posición de destino
     const indexDestino = direccion === 'SUBIR' ? indexActual - 1 : indexActual + 1;
 
-    // Si intenta subir el primero o bajar el último, no hacemos nada
+    // 2. Validación: si intenta subir el primero o bajar el último, no hacemos nada
     if (indexDestino < 0 || indexDestino >= productosOrdenados.length) return;
 
-    const productoVecino = productosOrdenados[indexDestino];
+    const producto1 = productosOrdenados[indexActual];
+    const producto2 = productosOrdenados[indexDestino];
 
-    // Calculamos los números de orden actuales (si no tienen, usamos su índice)
-    const ordenActual = producto.orden !== undefined ? producto.orden : indexActual;
-    const ordenVecino = productoVecino.orden !== undefined ? productoVecino.orden : indexDestino;
+    // 3. NORMALIZACIÓN: Nos aseguramos de tener números de orden reales
+    // Si no tenían orden, usamos su índice actual como base para que el intercambio sea limpio
+    const orden1 = producto1.orden !== undefined ? producto1.orden : indexActual;
+    const orden2 = producto2.orden !== undefined ? producto2.orden : indexDestino;
 
-    // Intercambiamos los papeles
-    let nuevoOrdenActual = ordenVecino;
-    let nuevoOrdenVecino = ordenActual;
-
-    // Corrección por si ambos fuesen iguales (productos nuevos sin ordenar)
-    if (nuevoOrdenActual === nuevoOrdenVecino) {
-      nuevoOrdenActual = indexDestino;
-      nuevoOrdenVecino = indexActual;
-    }
-
-    // Guardamos los dos cambios en Firebase de golpe
-    await updateDoc(doc(db, 'productos', producto.id), { orden: nuevoOrdenActual });
-    await updateDoc(doc(db, 'productos', productoVecino.id), { orden: nuevoOrdenVecino });
+    // 4. Intercambiamos los valores de orden en Firebase
+    await updateDoc(doc(db, 'productos', producto1.id), { orden: orden2 });
+    await updateDoc(doc(db, 'productos', producto2.id), { orden: orden1 });
   };
 
   const pedidosProcesados = [...pedidos].sort((a, b) => {
