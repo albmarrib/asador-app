@@ -118,8 +118,9 @@ tema: {
   };
 export default function ClienteMenu() {
 
-    const [idioma, setIdioma] = useState('es'); // <-- NUEVO ESTADO PARA EL IDIOMA
+    const [idioma, setIdioma] = useState('es'); 
     const [franjas, setFranjas] = useState([]);
+    const [hornadas, setHornadas] = useState([]); // <-- NUEVO: EL MÓVIL ESCUCHA EL ASADOR
     const [productos, setProductos] = useState([]);
     const [pedidos, setPedidos] = useState([]);
     const [categorias, setCategorias] = useState([]); // <-- NUEVO: Guarda las categorías
@@ -159,7 +160,7 @@ const qProductos = query(collection(db, 'productos'), where('local', '==', LOCAL
       setCategoriasAbiertas(prev => Object.keys(prev).length === 0 ? inicialAbiertas : prev);
     });
 
-    const qPedidos = query(collection(db, 'pedidos'), where('local', '==', LOCAL_ID));
+const qPedidos = query(collection(db, 'pedidos'), where('local', '==', LOCAL_ID));
     const unsubscribePedidos = onSnapshot(qPedidos, (snapshot) => {
       setPedidos(
         snapshot.docs
@@ -168,11 +169,23 @@ const qProductos = query(collection(db, 'productos'), where('local', '==', LOCAL
       );
     });
 
+    const inicioDia = new Date();
+    inicioDia.setHours(0, 0, 0, 0);
+    const qHornadas = query(collection(db, 'hornadas'), where('local', '==', LOCAL_ID), where('activa', '==', true));
+    const unsubscribeHornadas = onSnapshot(qHornadas, (snapshot) => {
+      const hornadasActivas = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(h => new Date(h.horaCarga) > inicioDia) 
+        .sort((a, b) => new Date(a.horaListo) - new Date(b.horaListo));
+      setHornadas(hornadasActivas);
+    });
+
     return () => {
       unsubscribeFranjas();
       unsubscribeProductos();
-      unsubscribeCategorias(); // <-- NUEVO
+      unsubscribeCategorias();
       unsubscribePedidos();
+      unsubscribeHornadas();
     };
   }, []);
 
@@ -192,59 +205,138 @@ const qProductos = query(collection(db, 'productos'), where('local', '==', LOCAL
     }));
   };
 
-  // --- LÓGICA DE STOCK Y CARRITO ---
+// --- LÓGICA DE STOCK Y CARRITO (CEREBRO ACUMULADO) ---
   
-  // Extrae el consumo usando parseFloat para que entienda los decimales (0.5)
-  const obtenerReservadosPorFranja = (horaFranjaInicio) => {
-    return pedidos
-      .filter(p => p.hora === horaFranjaInicio && !p.entregado)
-      .reduce((sum, p) => sum + (parseFloat(p.detalle) || 0), 0);
-  };
-
-  // Suma cuánto espacio de horno requiere nuestro carrito actual
-  const calcularUnidadesConsumidas = () => {
-    let unidades = 0;
+  // Calcula SOLO los pollos que hay en el carrito (los extras van aparte)
+  const calcularPollosConsumidos = () => {
+    let pollos = 0;
     Object.entries(carrito).forEach(([id, cant]) => {
       const p = productos.find(x => x.id === id);
-      if (p && p.controlaStock) {
-        unidades += (parseFloat(p.consumeUnidades) * cant);
+      if (p && p.controlaStock && p.nombre.toUpperCase().includes('POLLO')) {
+        pollos += (parseFloat(p.consumeUnidades) * cant);
       }
     });
-    return unidades;
+    return pollos;
   };
 
- // NUEVO: Vigilante de la Paella (Lo subimos para que el useEffect lo pueda usar)
-const tienePaella = Object.entries(carrito).some(([id, cant]) => {
-const p = productos.find(x => x.id === id);
-return p && p.nombre.toUpperCase().includes('PAELLA') && cant > 0;
-});
+// Motor matemático: Cruza Hornadas vs Pedidos en el tiempo
+  const calcularEstadoStockDinámico = (horaFranjaInicio) => {
+    const horas = franjas.map(f => f.hora.split(' ')[0]).sort();
+    const indexActual = horas.indexOf(horaFranjaInicio);
+    
+    // Solo los productos que consumen 1 o más tienen su propia alarma y cálculo.
+    const stockControlados = productos.filter(p => p.controlaStock && parseFloat(p.consumeUnidades || 1) >= 1);
+    const resultado = {};
 
-// Verifica si el carrito supera el stock o hay que deseleccionar la hora por la paella
-useEffect(() => {
-if (horaRecogida) {
-const franjaActual = franjas.find(f => f.hora.split(' ')[0] === horaRecogida);
-if (franjaActual) {
-const reservados = obtenerReservadosPorFranja(horaRecogida);
-const disponibles = Math.max(franjaActual.max - reservados, 0);
+    stockControlados.forEach(prod => {
+      if (indexActual === -1) {
+        resultado[prod.id] = { libres: 0, faltan: 0, nombre: prod.nombre };
+        return;
+      }
 
-let bloqueadoPorPaella = false;
-if (tienePaella) {
-const ahora = new Date();
-const [horas, minutos] = horaRecogida.split(':');
-const horaFranja = new Date();
-horaFranja.setHours(parseInt(horas), parseInt(minutos), 0, 0);
-if ((horaFranja - ahora) < 120 * 60 * 1000) {
-bloqueadoPorPaella = true;
-}
-}
+      const esPolloPrincipal = prod.nombre.toUpperCase().includes('POLLO');
+      let minDisponible = Infinity;
 
-// Si excede el stock O añadió una paella tarde, le quitamos la hora seleccionada
-if (calcularUnidadesConsumidas() > disponibles || bloqueadoPorPaella) {
-setHoraRecogida(''); 
-}
-}
-}
-}, [carrito, franjas, pedidos, horaRecogida, tienePaella]);
+      for (let i = indexActual; i < horas.length; i++) {
+        const horaEval = horas[i];
+        const fechaEval = new Date();
+        const [h, m] = horaEval.split(':').map(Number);
+        fechaEval.setHours(h, m, 0, 0);
+
+        const horneadosAcumulados = hornadas.reduce((sum, horno) => {
+          const esEsteProducto = horno.productoId === prod.id || (!horno.productoId && esPolloPrincipal);
+          if (esEsteProducto && new Date(horno.horaListo) <= fechaEval && horno.activa) {
+            return sum + horno.cantidad;
+          }
+          return sum;
+        }, 0);
+
+        let pedidosAcumulados = 0;
+        pedidos.filter(p => !p.historico && p.hora <= horaEval).forEach(p => {
+           const texto = String(p.detalle).includes('|') ? String(p.detalle).split('|')[1] : String(p.detalle);
+           if (texto) {
+              texto.split('+').forEach(parte => {
+                 const match = parte.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(.*)/i);
+                 if (match) {
+                    const cant = parseFloat(match[1]);
+                    const nombreTicket = match[2].trim().toUpperCase();
+                    
+                    if (nombreTicket === prod.nombre.toUpperCase()) {
+                        // Si el cliente pide el pollo entero
+                        pedidosAcumulados += cant * parseFloat(prod.consumeUnidades || 1);
+                    } else if (esPolloPrincipal) {
+                        // Si pide medio pollo, detectamos que es una fracción y lo sumamos a este pollo
+                        const prodFraccion = productos.find(x => x.nombre.toUpperCase() === nombreTicket);
+                        if (prodFraccion && prodFraccion.controlaStock && parseFloat(prodFraccion.consumeUnidades || 1) < 1) {
+                            pedidosAcumulados += cant * parseFloat(prodFraccion.consumeUnidades);
+                        }
+                    }
+                 }
+              });
+           }
+        });
+
+        const stockVirtual = horneadosAcumulados - pedidosAcumulados;
+        if (stockVirtual < minDisponible) minDisponible = stockVirtual;
+      }
+
+      resultado[prod.id] = {
+        libres: Math.max(minDisponible, 0),
+        faltan: minDisponible < 0 ? Math.ceil(Math.abs(minDisponible)) : 0,
+        nombre: prod.nombre
+      };
+    });
+
+    return resultado;
+  };
+
+  const tienePaella = Object.entries(carrito).some(([id, cant]) => {
+    const p = productos.find(x => x.id === id);
+    return p && p.nombre.toUpperCase().includes('PAELLA') && cant > 0;
+  });
+
+// Validador en tiempo real: ¿Me acabo de pasar de frenada?
+  useEffect(() => {
+    if (horaRecogida) {
+      const f = franjas.find(x => x.hora.split(' ')[0] === horaRecogida);
+      if (!f) return;
+
+      let bloqueado = false;
+
+      // 1. Check Paella
+      if (tienePaella) {
+        const ahora = new Date();
+        const [horas, minutos] = horaRecogida.split(':');
+        const horaFranja = new Date();
+        horaFranja.setHours(parseInt(horas), parseInt(minutos), 0, 0);
+        if ((horaFranja - ahora) < 120 * 60 * 1000) bloqueado = true;
+      }
+
+      // 2. Check Stock Dinámico Global (Pollos y Extras)
+      const estadoStock = calcularEstadoStockDinámico(horaRecogida);
+      
+      const libresPollos = Object.values(estadoStock)
+          .filter(s => s.nombre.toUpperCase().includes('POLLO'))
+          .reduce((sum, s) => sum + s.libres, 0);
+          
+      if (calcularPollosConsumidos() > libresPollos) {
+          bloqueado = true;
+      }
+
+      // 3. Check Extras
+      Object.entries(carrito).forEach(([id, cant]) => {
+        const p = productos.find(x => x.id === id);
+        if (p && p.controlaStock && !p.nombre.toUpperCase().includes('POLLO')) {
+           const stockItem = estadoStock[id];
+           if (stockItem && cant > stockItem.libres) {
+               bloqueado = true;
+           }
+        }
+      });
+
+      if (bloqueado) setHoraRecogida('');
+    }
+  }, [carrito, franjas, pedidos, horaRecogida, tienePaella, hornadas, productos]);
 
 const handleModificarCarrito = (id, incremento) => {
 setCarrito(prev => {
@@ -288,7 +380,7 @@ const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
       return;
     }
 
-    const unidadesConsumidas = calcularUnidadesConsumidas();
+    const unidadesConsumidas = calcularPollosConsumidos();
     const lineasTicket = [];
     Object.entries(carrito).forEach(([id, cant]) => {
       const p = productos.find(x => x.id === id);
@@ -584,20 +676,8 @@ return (
                     </label>
                     <div className="grid grid-cols-3 gap-2">
 {(() => {
-                  // Calculamos primero qué lleva el cliente en su carrito actual
-                  const cantPatatasCarrito = Object.entries(carrito).reduce((sum, [id, cant]) => {
-                    const p = productos.find(x => x.id === id);
-                    return p && p.nombre.toUpperCase().includes('PATATA') ? sum + cant : sum;
-                  }, 0);
-
-                  const cantButisCarrito = Object.entries(carrito).reduce((sum, [id, cant]) => {
-                    const p = productos.find(x => x.id === id);
-                    return p && p.nombre.toUpperCase().includes('BUTI') ? sum + cant : sum;
-                  }, 0);
-
                   return franjas.map(f => {
                     const h = f.hora.split(' ')[0];
-                    
                     const ahora = new Date();
                     const [horas, minutos] = h.split(':');
                     const horaFranja = new Date();
@@ -606,47 +686,34 @@ return (
                     const franjaPasada = horaFranja < ahora;
 
                     let bloqueadoPorPaella = false;
-                    if (tienePaella) {
-                      if ((horaFranja - ahora) < 120 * 60 * 1000) {
-                        bloqueadoPorPaella = true;
-                      }
+                    if (tienePaella && (horaFranja - ahora) < 120 * 60 * 1000) {
+                      bloqueadoPorPaella = true;
                     }
 
-                    const reservados = obtenerReservadosPorFranja(h);
-                    const disponibles = Math.max(f.max - reservados, 0);
-                    const unidadesPedidas = calcularUnidadesConsumidas();
-                    const cabenEnElHorno = disponibles >= unidadesPedidas;
+const estadoStock = calcularEstadoStockDinámico(h);
 
-                    // --- NUEVA LÓGICA: CONTAR EXTRAS COMPROMETIDOS EN ESTA FRANJA ---
-                    let consumosExtras = { patatas: 0, butifarras: 0 };
-                    pedidos.forEach(p => {
-                      if (p.hora !== h || p.entregado || p.historico) return;
-                      const texto = String(p.detalle).includes('|') ? String(p.detalle).split('|')[1] : String(p.detalle);
-                      if (texto) {
-                        texto.split('+').forEach(parte => {
-                          const match = parte.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(.*)/i);
-                          if (match) {
-                            const cant = parseFloat(match[1]);
-                            const nombre = match[2].trim().toUpperCase();
-                            if (nombre.includes('PATATA')) consumosExtras.patatas += cant;
-                            if (nombre.includes('BUTI')) consumosExtras.butifarras += cant;
-                          }
-                        });
+                    // 1. ¿Hay pollos suficientes en esta hora?
+                    const libresPollos = Object.values(estadoStock)
+                      .filter(s => s.nombre.toUpperCase().includes('POLLO'))
+                      .reduce((sum, s) => sum + s.libres, 0);
+                    const faltanPollos = calcularPollosConsumidos() > libresPollos;
+
+                    // 2. ¿Hay extras suficientes en esta hora? (Dinámico)
+                    let faltaAlgunExtra = false;
+                    let nombreExtraFaltante = "";
+                    
+                    Object.entries(carrito).forEach(([id, cant]) => {
+                      const p = productos.find(x => x.id === id);
+                      if (p && p.controlaStock && !p.nombre.toUpperCase().includes('POLLO') && !faltaAlgunExtra) {
+                        const stockItem = estadoStock[p.id];
+                        if (stockItem && cant > stockItem.libres) {
+                          faltaAlgunExtra = true;
+                          nombreExtraFaltante = p.nombre;
+                        }
                       }
                     });
 
-                    const limitePatatas = Number(f.capacidad?.patatas || 0);
-                    const limiteButifarras = Number(f.capacidad?.butifarras || 0);
-
-                    const patatasDisponibles = Math.max(limitePatatas - consumosExtras.patatas, 0);
-                    const butifarrasDisponibles = Math.max(limiteButifarras - consumosExtras.butifarras, 0);
-
-                    // Chivatos de falta de stock específicos
-                    const faltaStockPatatas = cantPatatasCarrito > 0 && cantPatatasCarrito > patatasDisponibles;
-                    const faltaStockButifarras = cantButisCarrito > 0 && cantButisCarrito > butifarrasDisponibles;
-
-                    // El botón se bloquea por cualquiera de las condiciones limitantes
-                    const botonDeshabilitado = !cabenEnElHorno || bloqueadoPorPaella || franjaPasada || faltaStockPatatas || faltaStockButifarras;
+                    const botonDeshabilitado = franjaPasada || bloqueadoPorPaella || faltanPollos || faltaAlgunExtra;
 
                     return (
                       <button
@@ -666,15 +733,11 @@ return (
                           <span className="text-[9px] font-black text-slate-400 tracking-wider uppercase">Cerrada</span>
                         ) : bloqueadoPorPaella ? (
                           <span className="text-[8px] font-black text-rose-500 tracking-wider uppercase">{TEXTOS[idioma].paellaEspera}</span>
-                        ) : faltaStockPatatas ? (
-                          <span className="text-[8px] font-black text-amber-600 tracking-wider uppercase">
-                            {idioma === 'es' ? 'Sin Patatas' : idioma === 'ca' ? 'Sense Patates' : idioma === 'en' ? 'No Potatoes' : 'Sans Frites'}
+                        ) : faltaAlgunExtra ? (
+                          <span className="text-[8px] font-black text-amber-600 tracking-wider uppercase px-1 text-center leading-tight truncate w-full">
+                            Sin {nombreExtraFaltante}
                           </span>
-                        ) : faltaStockButifarras ? (
-                          <span className="text-[8px] font-black text-amber-600 tracking-wider uppercase">
-                            {idioma === 'es' ? 'Sin Butifarra' : idioma === 'ca' ? 'Sense Botifarra' : idioma === 'en' ? 'No Sausage' : 'Sans Saucisse'}
-                          </span>
-                        ) : !cabenEnElHorno ? (
+                        ) : faltanPollos ? (
                           <span className="text-[9px] font-black text-rose-500 tracking-wider uppercase">{TEXTOS[idioma].completo}</span>
                         ) : (
                           <span className={`text-[9px] font-black tracking-wider ${horaRecogida === h ? APP_CONFIG.tema.textoAcento : APP_CONFIG.tema.textoPrincipal}`}>{TEXTOS[idioma].disponible}</span>
