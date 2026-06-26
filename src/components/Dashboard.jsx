@@ -22,6 +22,7 @@ export default function Dashboard() {
   const [pantallaActiva, setPantallaActiva] = useState('PEDIDOS'); 
   const [franjas, setFranjas] = useState([]);
   const [pedidos, setPedidos] = useState([]);
+  const [pedidosHistoricos, setPedidosHistoricos] = useState([]);
   const [productos, setProductos] = useState([]); 
   const [categorias, setCategorias] = useState([]); 
   const [hornadas, setHornadas] = useState([]); 
@@ -61,6 +62,16 @@ export default function Dashboard() {
     ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', 'Ñ'],
     ['Z', 'X', 'C', 'V', 'B', 'N', 'M', ' ', '←']
   ];
+
+  useEffect(() => {
+    if (modalEstadisticasAbierto) {
+      const qHistoricos = query(collection(db, 'pedidos'), where('local', '==', LOCAL_ID));
+      const unsubscribeHistoricos = onSnapshot(qHistoricos, (snapshot) => {
+        setPedidosHistoricos(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      });
+      return () => unsubscribeHistoricos();
+    }
+  }, [modalEstadisticasAbierto]);
 
   useEffect(() => {
     const qPedidos = query(collection(db, 'pedidos'), where('local', '==', LOCAL_ID));
@@ -1396,75 +1407,153 @@ const handleEditarProducto = async (producto) => {
         );
       })()}
 
-      {modalEstadisticasAbierto && (() => {
-        const pedidosArchivados = pedidos.filter(p => p.historico);
-        const pedidosEnFecha = pedidosArchivados.filter(p => {
-          const fechaPedido = p.fecha || new Date(parseInt(p.id) || Date.now()).toISOString().split('T')[0];
+{modalEstadisticasAbierto && (() => {
+        // Filtramos usando las fechas seleccionadas
+        const pedidosEnFecha = pedidosHistoricos.filter(p => {
+          const fechaPedido = p.fecha || (p.creadoEn && p.creadoEn.toDate ? p.creadoEn.toDate().toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
           return fechaPedido >= filtroFechaInicio && fechaPedido <= filtroFechaFin;
         });
 
         let ventasGlobales = 0; let perdidasGlobales = 0; let volumenGlobal = 0;
         let ventasFiltradas = 0; let perdidasFiltradas = 0; let volumenFiltrado = 0;
-        const datosDiarios = {};
-        const desgloseCanales = { 'WEB': { reservas: 0, dinero: 0 }, 'TELÉFONO': { reservas: 0, dinero: 0 }, 'TIENDA': { reservas: 0, dinero: 0 }, 'DIRECTA': { reservas: 0, dinero: 0 } };
+        const desgloseCanales = { 'WEB/QR': { reservas: 0, dinero: 0 }, 'TELÉFONO': { reservas: 0, dinero: 0 }, 'TIENDA': { reservas: 0, dinero: 0 }, 'MOSTRADOR DIRECTO': { reservas: 0, dinero: 0 } };
 
         pedidosEnFecha.forEach(p => {
-          const fechaPedido = p.fecha || new Date(parseInt(p.id) || Date.now()).toISOString().split('T')[0];
-          if (!datosDiarios[fechaPedido]) datosDiarios[fechaPedido] = { ventas: 0, perdidas: 0, volumen: 0, ventasFiltro: 0, volumenFiltro: 0 };
-          const esExito = p.entregado && (p.cobrado || p.cliente === 'VENTA DIRECTA');
+          const esVentaDirecta = p.cliente === 'VENTA DIRECTA';
+          const estaCobrado = p.cobrado || esVentaDirecta;
+          const esExito = p.entregado && estaCobrado && p.estadoCierre !== 'perdida_no_recogido';
+          
           let totalTicket = 0;
           const texto = String(p.detalle).includes('|') ? String(p.detalle).split('|')[1] : String(p.detalle);
+          
           texto.split('+').forEach(parte => {
             const match = parte.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(.*)/i);
             if (match) {
               const cantidad = parseFloat(match[1]);
               const nombreProd = match[2].trim().toUpperCase();
               const prod = productos.find(x => x.nombre.toUpperCase() === nombreProd);
+              
               if (prod) {
                 const valorLinea = cantidad * prod.precio;
                 totalTicket += valorLinea;
+                
                 const esBuscado = filtroProductoEstat === 'TODOS' || nombreProd === filtroProductoEstat;
+                
                 if (esExito) {
-                  ventasGlobales += valorLinea; volumenGlobal += cantidad;
-                  datosDiarios[fechaPedido].ventas += valorLinea; datosDiarios[fechaPedido].volumen += cantidad;
-                  if (esBuscado) { ventasFiltradas += valorLinea; volumenFiltrado += cantidad; datosDiarios[fechaPedido].ventasFiltro += valorLinea; datosDiarios[fechaPedido].volumenFiltro += cantidad; }
-                } else if (!p.entregado) {
-                  perdidasGlobales += valorLinea; datosDiarios[fechaPedido].perdidas += valorLinea;
+                  ventasGlobales += valorLinea; 
+                  volumenGlobal += cantidad;
+                  if (esBuscado) { ventasFiltradas += valorLinea; volumenFiltrado += cantidad; }
+                } else if (!p.entregado || p.estadoCierre === 'perdida_no_recogido') {
+                  perdidasGlobales += valorLinea;
                   if (esBuscado) perdidasFiltradas += valorLinea;
                 }
               }
             }
           });
+          
           if (esExito) {
-            if (p.origen === 'QR') { desgloseCanales['WEB'].reservas++; desgloseCanales['WEB'].dinero += totalTicket; }
-            else if (p.origen === 'TELÉFONO') { desgloseCanales['TELÉFONO'].reservas++; desgloseCanales['TELÉFONO'].dinero += totalTicket; }
-            else if (p.origen === 'TIENDA') { desgloseCanales['TIENDA'].reservas++; desgloseCanales['TIENDA'].dinero += totalTicket; }
-            else { desgloseCanales['DIRECTA'].reservas++; desgloseCanales['DIRECTA'].dinero += totalTicket; }
+            const canal = p.origen ? p.origen.toUpperCase() : 'TIENDA';
+            if (canal.includes('QR') || canal.includes('WEB')) { desgloseCanales['WEB/QR'].reservas++; desgloseCanales['WEB/QR'].dinero += totalTicket; }
+            else if (canal.includes('TELÉFONO')) { desgloseCanales['TELÉFONO'].reservas++; desgloseCanales['TELÉFONO'].dinero += totalTicket; }
+            else if (canal.includes('DIRECTA') || canal.includes('MOSTRADOR')) { desgloseCanales['MOSTRADOR DIRECTO'].reservas++; desgloseCanales['MOSTRADOR DIRECTO'].dinero += totalTicket; }
+            else { desgloseCanales['TIENDA'].reservas++; desgloseCanales['TIENDA'].dinero += totalTicket; }
           }
         });
+
+        // Función para exportar a CSV (Excel)
+        const exportarExcel = () => {
+          let csvContent = "data:text/csv;charset=utf-8,";
+          csvContent += "Fecha,Cliente,Hora,Detalle,Total (€),Origen,Estado\n";
+          
+          pedidosEnFecha.forEach(p => {
+             const fecha = p.fecha || (p.creadoEn && p.creadoEn.toDate ? p.creadoEn.toDate().toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+             let total = 0;
+             const texto = String(p.detalle).includes('|') ? String(p.detalle).split('|')[1] : String(p.detalle);
+             texto.split('+').forEach(parte => {
+                const match = parte.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(.*)/i);
+                if(match) {
+                   const prod = productos.find(x => x.nombre.toUpperCase() === match[2].trim().toUpperCase());
+                   if(prod) total += parseFloat(match[1]) * prod.precio;
+                }
+             });
+             const estado = (p.entregado && (p.cobrado || p.cliente === 'VENTA DIRECTA')) ? "Completado" : (!p.entregado ? "Pérdida/No Recogido" : "Pendiente Cobro");
+             const fila = `"${fecha}","${p.cliente}","${p.hora}","${texto.trim()}","${total.toFixed(2)}","${p.origen || 'Tienda'}","${estado}"`;
+             csvContent += fila + "\n";
+          });
+          
+          const encodedUri = encodeURI(csvContent);
+          const link = document.createElement("a");
+          link.setAttribute("href", encodedUri);
+          link.setAttribute("download", `Estadisticas_LaFosca_${filtroFechaInicio}_a_${filtroFechaFin}.csv`);
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        };
 
         return (
           <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-md flex items-center justify-center p-4 lg:p-8 z-50 overflow-hidden">
             <div className="bg-white rounded-[2rem] w-full max-w-7xl h-[95vh] flex flex-col shadow-2xl overflow-hidden border-4 border-slate-800">
+              
+              {/* CABECERA */}
               <div className="bg-slate-800 p-6 shrink-0 border-b-4 border-slate-900">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
                   <h3 className="text-3xl font-black text-white uppercase tracking-tight">📊 INTELIGENCIA DE NEGOCIO</h3>
                   <div className="flex gap-3 w-full md:w-auto">
+                    <button onClick={exportarExcel} className="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xl px-6 py-2 rounded-xl cursor-pointer transition-colors shadow-md">📥 EXPORTAR EXCEL</button>
                     <button onClick={() => setModalEstadisticasAbierto(false)} className="flex-1 md:flex-none bg-slate-700 hover:bg-rose-600 text-white font-black text-xl px-6 py-2 rounded-xl cursor-pointer transition-colors">✕ CERRAR</button>
                   </div>
                 </div>
-              </div>
-              <div className="p-6 flex-1 overflow-y-auto bg-slate-100 flex flex-col gap-6">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 shrink-0">
-                  <div className="bg-white p-5 rounded-3xl border-2 border-emerald-200 shadow-sm flex flex-col justify-center items-center">
-                    <span className="text-xs font-black text-emerald-800 uppercase tracking-widest mb-1">Ingresos Totales</span>
-                    <span className="text-4xl font-mono font-black text-emerald-600">{ventasFiltradas.toFixed(2)}€</span>
+                
+                {/* FILTROS DE BÚSQUEDA */}
+                <div className="flex flex-wrap gap-4 bg-slate-700 p-4 rounded-xl">
+                  <div className="flex flex-col">
+                    <label className="text-[10px] font-bold text-slate-300 uppercase mb-1">Fecha Inicio</label>
+                    <input type="date" value={filtroFechaInicio} onChange={(e) => setFiltroFechaInicio(e.target.value)} className="bg-slate-800 text-white border-2 border-slate-600 rounded-lg px-3 py-2 font-mono focus:border-indigo-500 focus:outline-none" />
                   </div>
-                  <div className="bg-white p-5 rounded-3xl border-2 border-rose-200 shadow-sm flex flex-col justify-center items-center">
-                    <span className="text-xs font-black text-rose-800 uppercase tracking-widest mb-1">Pérdidas Totales</span>
-                    <span className="text-4xl font-mono font-black text-rose-600">{perdidasFiltradas.toFixed(2)}€</span>
+                  <div className="flex flex-col">
+                    <label className="text-[10px] font-bold text-slate-300 uppercase mb-1">Fecha Fin</label>
+                    <input type="date" value={filtroFechaFin} onChange={(e) => setFiltroFechaFin(e.target.value)} className="bg-slate-800 text-white border-2 border-slate-600 rounded-lg px-3 py-2 font-mono focus:border-indigo-500 focus:outline-none" />
+                  </div>
+                  <div className="flex flex-col flex-1 min-w-[200px]">
+                    <label className="text-[10px] font-bold text-slate-300 uppercase mb-1">Filtrar por Producto</label>
+                    <select value={filtroProductoEstat} onChange={(e) => setFiltroProductoEstat(e.target.value)} className="bg-slate-800 text-white border-2 border-slate-600 rounded-lg px-3 py-2 font-bold uppercase focus:border-indigo-500 focus:outline-none">
+                      <option value="TODOS">🧾 TODOS LOS PRODUCTOS</option>
+                      {productos.map(p => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
+                    </select>
                   </div>
                 </div>
+              </div>
+
+              {/* CONTENIDO Y TARJETAS */}
+              <div className="p-6 flex-1 overflow-y-auto bg-slate-100 flex flex-col gap-6">
+                
+                <h4 className="text-xl font-black text-slate-700 uppercase border-b-2 border-slate-200 pb-2">Resumen General ({filtroProductoEstat})</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 shrink-0">
+                  <div className="bg-white p-6 rounded-3xl border-2 border-emerald-200 shadow-sm flex flex-col justify-center items-center">
+                    <span className="text-xs font-black text-emerald-800 uppercase tracking-widest mb-1">Ingresos Totales</span>
+                    <span className="text-5xl font-mono font-black text-emerald-600">{ventasFiltradas.toFixed(2)}€</span>
+                  </div>
+                  <div className="bg-white p-6 rounded-3xl border-2 border-rose-200 shadow-sm flex flex-col justify-center items-center">
+                    <span className="text-xs font-black text-rose-800 uppercase tracking-widest mb-1">Pérdidas (No recogidos)</span>
+                    <span className="text-5xl font-mono font-black text-rose-600">{perdidasFiltradas.toFixed(2)}€</span>
+                  </div>
+                  <div className="bg-white p-6 rounded-3xl border-2 border-indigo-200 shadow-sm flex flex-col justify-center items-center">
+                    <span className="text-xs font-black text-indigo-800 uppercase tracking-widest mb-1">Unidades Vendidas</span>
+                    <span className="text-5xl font-mono font-black text-indigo-600">{volumenFiltrado}</span>
+                  </div>
+                </div>
+
+                <h4 className="text-xl font-black text-slate-700 uppercase border-b-2 border-slate-200 pb-2 mt-4">Ventas por Canal de Origen</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {Object.entries(desgloseCanales).map(([canal, stats]) => (
+                    <div key={canal} className="bg-white p-4 rounded-2xl border-2 border-slate-200 flex flex-col">
+                      <span className="text-xs font-black text-slate-500 uppercase">{canal}</span>
+                      <span className="text-2xl font-black text-slate-800 mt-2">{stats.dinero.toFixed(2)}€</span>
+                      <span className="text-sm font-bold text-slate-400">{stats.reservas} tickets</span>
+                    </div>
+                  ))}
+                </div>
+
               </div>
             </div>
           </div>
