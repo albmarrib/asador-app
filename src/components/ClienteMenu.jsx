@@ -674,79 +674,74 @@ return (
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
                       {TEXTOS[idioma].AQueHora}
                     </label>
-                    <div className="grid grid-cols-3 gap-2">
-{(() => {
-                  return franjas.map(f => {
-                    const h = f.hora.split(' ')[0];
-                    const ahora = new Date();
-                    const [horas, minutos] = h.split(':');
-                    const horaFranja = new Date();
-                    horaFranja.setHours(parseInt(horas), parseInt(minutos), 0, 0);
-
-                    const franjaPasada = horaFranja < ahora;
-
-                    let bloqueadoPorPaella = false;
-                    if (tienePaella && (horaFranja - ahora) < 120 * 60 * 1000) {
-                      bloqueadoPorPaella = true;
-                    }
-
-const estadoStock = calcularEstadoStockDinámico(h);
-
-                    // 1. ¿Hay pollos suficientes en esta hora?
-                    const libresPollos = Object.values(estadoStock)
-                      .filter(s => s.nombre.toUpperCase().includes('POLLO'))
-                      .reduce((sum, s) => sum + s.libres, 0);
-                    const faltanPollos = calcularPollosConsumidos() > libresPollos;
-
-                    // 2. ¿Hay extras suficientes en esta hora? (Dinámico)
-                    let faltaAlgunExtra = false;
-                    let nombreExtraFaltante = "";
-                    
-                    Object.entries(carrito).forEach(([id, cant]) => {
-                      const p = productos.find(x => x.id === id);
-                      if (p && p.controlaStock && !p.nombre.toUpperCase().includes('POLLO') && !faltaAlgunExtra) {
-                        const stockItem = estadoStock[p.id];
-                        if (stockItem && cant > stockItem.libres) {
-                          faltaAlgunExtra = true;
-                          nombreExtraFaltante = p.nombre;
-                        }
-                      }
-                    });
-
-                    const botonDeshabilitado = franjaPasada || bloqueadoPorPaella || faltanPollos || faltaAlgunExtra;
-
-                    return (
-                      <button
-                        key={f.id}
-                        type="button"
-                        disabled={botonDeshabilitado} 
-                        onClick={() => setHoraRecogida(h)}
-                        className={`py-3 rounded-xl flex flex-col items-center justify-center transition-all border-2 
-                        ${botonDeshabilitado 
-                        ? 'bg-slate-50 border-slate-100 opacity-50 cursor-not-allowed grayscale' 
-                        : horaRecogida === h 
-                        ? APP_CONFIG.tema.botonActivo + ' shadow-md' 
-                        : 'bg-white border-slate-200 text-slate-700 hover:' + APP_CONFIG.tema.bordeOscuro}`}
+<div className="w-full">
+                      <select
+                        value={horaRecogida || ""}
+                        onChange={(e) => setHoraRecogida(e.target.value)}
+                        className="w-full bg-white border-2 border-slate-200 text-slate-700 font-black rounded-xl px-5 py-4 text-lg md:text-xl focus:outline-none focus:border-orange-500 shadow-sm cursor-pointer appearance-none"
                       >
-                        <span className="text-sm font-black font-mono">{h}</span>
-                        {franjaPasada ? (
-                          <span className="text-[9px] font-black text-slate-400 tracking-wider uppercase">Cerrada</span>
-                        ) : bloqueadoPorPaella ? (
-                          <span className="text-[8px] font-black text-rose-500 tracking-wider uppercase">{TEXTOS[idioma].paellaEspera}</span>
-                        ) : faltaAlgunExtra ? (
-                          <span className="text-[8px] font-black text-amber-600 tracking-wider uppercase px-1 text-center leading-tight truncate w-full">
-                            Sin {nombreExtraFaltante}
-                          </span>
-                        ) : faltanPollos ? (
-                          <span className="text-[9px] font-black text-rose-500 tracking-wider uppercase">{TEXTOS[idioma].completo}</span>
-                        ) : (
-                          <span className={`text-[9px] font-black tracking-wider ${horaRecogida === h ? APP_CONFIG.tema.textoAcento : APP_CONFIG.tema.textoPrincipal}`}>{TEXTOS[idioma].disponible}</span>
-                        )}
-                      </button>
-                    );
-                  });
-                })()}
-                     </div>
+                        <option value="" disabled>🕒 Toca aquí para elegir tu hora...</option>
+                        {(() => {
+                          return franjas.map(f => {
+                            const h = f.hora.split(' ')[0];
+                            const ahora = new Date();
+                            const [horas, minutos] = h.split(':');
+                            const horaFranja = new Date();
+                            horaFranja.setHours(parseInt(horas), parseInt(minutos), 0, 0);
+
+                            const franjaPasada = horaFranja < ahora;
+
+                            let bloqueadoPorPaella = false;
+                            if (tienePaella && (horaFranja - ahora) < 120 * 60 * 1000) {
+                              bloqueadoPorPaella = true;
+                            }
+
+                            const estadoStock = calcularEstadoStockDinámico(h);
+
+                            // 1. ¿Hay pollos suficientes en esta hora?
+                            const libresPollos = Object.values(estadoStock)
+                              .filter(s => s.nombre.toUpperCase().includes('POLLO'))
+                              .reduce((sum, s) => sum + s.libres, 0);
+                            const faltanPollos = calcularPollosConsumidos() > libresPollos;
+
+                            // 2. ¿Hay extras suficientes en esta hora? (Dinámico)
+                            let faltaAlgunExtra = false;
+                            let nombreExtraFaltante = "";
+                            
+                            Object.entries(carrito).forEach(([id, cant]) => {
+                              const p = productos.find(x => x.id === id);
+                              if (p && p.controlaStock && !p.nombre.toUpperCase().includes('POLLO') && !faltaAlgunExtra) {
+                                const stockItem = estadoStock[p.id];
+                                if (stockItem && cant > stockItem.libres) {
+                                  faltaAlgunExtra = true;
+                                  nombreExtraFaltante = p.nombre;
+                                }
+                              }
+                            });
+
+                            const botonDeshabilitado = franjaPasada || bloqueadoPorPaella || faltanPollos || faltaAlgunExtra;
+
+                            // Formateamos el texto que saldrá dentro del desplegable
+                            let textoEstado = "";
+                            if (franjaPasada) textoEstado = "- (Cerrada)";
+                            else if (bloqueadoPorPaella) textoEstado = `- (${TEXTOS[idioma].paellaEspera})`;
+                            else if (faltaAlgunExtra) textoEstado = `- (Sin ${nombreExtraFaltante})`;
+                            else if (faltanPollos) textoEstado = `- (${TEXTOS[idioma].completo})`;
+                            else textoEstado = `- ✓ ${TEXTOS[idioma].disponible}`;
+
+                            return (
+                              <option 
+                                key={f.id} 
+                                value={h} 
+                                disabled={botonDeshabilitado}
+                              >
+                                {h} {textoEstado}
+                              </option>
+                            );
+                          });
+                        })()}
+                      </select>
+                    </div>
                   </div>
                 )}
 
