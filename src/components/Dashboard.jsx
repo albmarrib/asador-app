@@ -847,8 +847,8 @@ const handleEditarProducto = async (producto) => {
 
             <section className={`bg-white rounded-2xl p-5 shadow-sm border border-orange-100 flex flex-col overflow-hidden ${(modoLayout === 'FULL' && pantallaActiva !== 'PEDIDOS') ? 'hidden' : ''}`}>
               
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 border-b-2 border-slate-100 pb-4 shrink-0">
-<div className="flex flex-nowrap overflow-x-auto gap-2 w-full pb-2 scrollbar-hide">
+<div className="flex flex-col md:flex-row justify-between items-start gap-4 mb-4 border-b-2 border-slate-100 pb-4 shrink-0">
+                <div className="flex flex-nowrap overflow-x-auto gap-2 w-full pb-2 scrollbar-hide">
                   <button onClick={() => setFiltroHora('Todos')} className={`shrink-0 px-6 py-3 rounded-xl text-xs font-black uppercase border-2 transition-all cursor-pointer ${filtroHora === 'Todos' ? 'bg-slate-800 text-white border-slate-800' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}>Todos</button>
                   {franjas.map(f => { const h = f.hora.split(' ')[0]; return <button key={f.id} onClick={() => setFiltroHora(h)} className={`shrink-0 px-6 py-3 rounded-xl text-xs font-black border-2 transition-all cursor-pointer ${filtroHora === h ? 'bg-orange-600 text-white border-orange-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}>{h}</button> })}
                 </div>
@@ -1207,14 +1207,23 @@ const handleEditarProducto = async (producto) => {
                 <button onClick={() => { setModalAbierto(false); setEditandoPedidoId(null); }} className="bg-orange-700 hover:bg-rose-600 font-black text-xl px-4 py-2 rounded-xl">✕ Cancelar</button>
               </div>
               <div className="p-6 flex flex-col flex-1 overflow-hidden">
-                <div className="flex flex-row items-stretch gap-4 border-b-4 border-slate-100 pb-4 mb-4 shrink-0 h-20">
+<div className="flex flex-row items-stretch gap-4 border-b-4 border-slate-100 pb-4 mb-4 shrink-0 h-20">
                   <div className="w-1/4 min-w-[200px]">
                     <div onClick={() => setTecladoPantallaCompleta(true)} className="w-full h-full bg-slate-50 border-4 border-slate-200 hover:border-orange-400 rounded-xl flex items-center justify-center text-2xl font-black text-slate-800 cursor-pointer shadow-inner px-2"><span className="truncate">{nombreCliente || "👉 NOMBRE"}</span></div>
                   </div>
                   <div className="flex-1 flex flex-row flex-nowrap gap-2 overflow-x-auto pb-2 scrollbar-hide">
                     {franjas.map(f => {
                       const h = f.hora.split(' ')[0];
-                      return ( <button key={f.id} type="button" onClick={() => setHoraSeleccionada(h)} className={`flex-1 h-full min-w-[80px] rounded-xl font-black font-mono text-xl xl:text-3xl border-4 cursor-pointer flex items-center justify-center ${horaSeleccionada === h ? 'bg-orange-600 text-white border-orange-600 shadow-md' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>{h}</button> );
+                      return ( 
+                        <button 
+                          key={f.id} 
+                          type="button" 
+                          onClick={() => setHoraSeleccionada(h)} 
+                          className={`shrink-0 px-6 h-full rounded-xl font-black font-mono text-2xl border-4 cursor-pointer flex items-center justify-center transition-all ${horaSeleccionada === h ? 'bg-orange-600 text-white border-orange-600 shadow-md scale-105' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
+                        >
+                          {h}
+                        </button> 
+                      );
                     })}
                   </div>
                 </div>
