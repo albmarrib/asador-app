@@ -26,7 +26,7 @@ export default function Dashboard() {
   const [productos, setProductos] = useState([]); 
   const [categorias, setCategorias] = useState([]); 
   const [hornadas, setHornadas] = useState([]); 
-  const [configuracion, setConfiguracion] = useState({ id: null, capacidadMaxima: 48 });
+  const [configuracion, setConfiguracion] = useState({ id: null, capacidadMaxima: 48, modoTurnos: false, horaCorte: '17:00' });
 
   const [filtroHora, setFiltroHora] = useState('Todos');
   const [busqueda, setBusqueda] = useState(''); 
@@ -243,9 +243,57 @@ export default function Dashboard() {
     return totales;
   };
 
-  const capacidadTotal = hornadas.filter(h => !h.productoId || h.nombreProducto?.toUpperCase().includes('POLLO')).reduce((sum, h) => sum + h.cantidad, 0);
+  // --- LÓGICA DE TURNOS Y STOCK ---
+  const getHoraFromISO = (isoString) => {
+    if (!isoString) return '99:99';
+    const d = new Date(isoString);
+    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+  };
+
+  const esTurnoMañana = (horaHHMM) => {
+    if (!configuracion.modoTurnos || !configuracion.horaCorte) return true;
+    return horaHHMM < configuracion.horaCorte;
+  };
+
+  const hornadasPollo = hornadas.filter(h => !h.productoId || h.nombreProducto?.toUpperCase().includes('POLLO'));
+  
+  // Mañana
+  const hornadasManana = hornadasPollo.filter(h => esTurnoMañana(getHoraFromISO(h.horaListo)));
+  const pedidosManana = pedidos.filter(p => !p.historico && esTurnoMañana(p.hora));
+  const capacidadManana = hornadasManana.reduce((sum, h) => sum + h.cantidad, 0);
+  const reservadosManana = pedidosManana.reduce((sum, p) => sum + extraerUnidades(p.detalle), 0);
+  const remanenteManana = Math.max(capacidadManana - reservadosManana, 0);
+  const disponiblesManana = remanenteManana;
+
+  // Tarde
+  const hornadasTarde = hornadasPollo.filter(h => !esTurnoMañana(getHoraFromISO(h.horaListo)));
+  const pedidosTarde = pedidos.filter(p => !p.historico && !esTurnoMañana(p.hora));
+  const capacidadTardeSinRemanente = hornadasTarde.reduce((sum, h) => sum + h.cantidad, 0);
+  const capacidadTarde = capacidadTardeSinRemanente + (configuracion.modoTurnos ? remanenteManana : 0);
+  const reservadosTarde = pedidosTarde.reduce((sum, p) => sum + extraerUnidades(p.detalle), 0);
+  const balanceTarde = capacidadTarde - reservadosTarde;
+  const disponiblesTarde = Math.max(balanceTarde, 0);
+
+  // Totales Globales
+  const capacidadTotal = hornadasPollo.reduce((sum, h) => sum + h.cantidad, 0);
   const totalReservados = pedidos.filter(p => !p.historico).reduce((sum, p) => sum + extraerUnidades(p.detalle), 0);
   const totalDisponibles = Math.max(capacidadTotal - totalReservados, 0);
+
+  // Turno actual y alertas
+  const ahoraTurno = new Date();
+  const horaActualTextoTurno = `${ahoraTurno.getHours().toString().padStart(2, '0')}:${ahoraTurno.getMinutes().toString().padStart(2, '0')}`;
+  const esMañanaActual = esTurnoMañana(horaActualTextoTurno);
+
+  let alertaTarde = false;
+  if (configuracion.modoTurnos && esMañanaActual && pedidosTarde.length > 0 && balanceTarde < 0) {
+    const primerPedidoTarde = [...pedidosTarde].sort((a, b) => a.hora.localeCompare(b.hora))[0].hora;
+    const [hP, mP] = primerPedidoTarde.split(':').map(Number);
+    const minPrimerPedido = hP * 60 + mP;
+    const minActual = ahoraTurno.getHours() * 60 + ahoraTurno.getMinutes();
+    if (minPrimerPedido - minActual <= 90 && minPrimerPedido - minActual >= 0) {
+      alertaTarde = true;
+    }
+  }
 
   const obtenerFranjaActualEnCurso = () => {
     const ahora = new Date();
@@ -716,19 +764,105 @@ const handleEditarProducto = async (producto) => {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4 w-full lg:w-auto text-center font-mono">
-            <div className="bg-slate-100 p-3 rounded-xl border border-slate-200">
-              <span className="block text-[10px] font-bold text-slate-500 uppercase">Pollos Totales</span>
-              <span className="text-xl md:text-2xl font-black text-slate-700">{capacidadTotal}</span>
-            </div>
-            <div className="bg-orange-50 p-3 rounded-xl border border-orange-200">
-              <span className="block text-[10px] font-bold text-orange-700 uppercase">Reservados</span>
-              <span className="text-xl md:text-2xl font-black text-orange-600">{totalReservados}</span>
-            </div>
-            <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200">
-              <span className="block text-[10px] font-bold text-emerald-700 uppercase">Libres</span>
-              <span className="text-xl md:text-2xl font-black text-emerald-600">{totalDisponibles}</span>
-            </div>
+          <div className="flex flex-col gap-2 w-full lg:w-auto">
+            {alertaTarde && (
+              <div className="bg-red-100 text-red-800 p-2 rounded-xl text-xs font-black animate-pulse text-center border border-red-300">
+                ⚠️ ALERTA: FALTAN POLLOS PARA LOS PEDIDOS DE LA TARDE ({Math.abs(balanceTarde)} ud)
+              </div>
+            )}
+            
+            {!configuracion.modoTurnos ? (
+              <div className="grid grid-cols-3 gap-4 text-center font-mono">
+                <div className="bg-slate-100 p-3 rounded-xl border border-slate-200">
+                  <span className="block text-[10px] font-bold text-slate-500 uppercase">Pollos Totales</span>
+                  <span className="text-xl md:text-2xl font-black text-slate-700">{capacidadTotal}</span>
+                </div>
+                <div className="bg-orange-50 p-3 rounded-xl border border-orange-200">
+                  <span className="block text-[10px] font-bold text-orange-700 uppercase">Reservados</span>
+                  <span className="text-xl md:text-2xl font-black text-orange-600">{totalReservados}</span>
+                </div>
+                <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200">
+                  <span className="block text-[10px] font-bold text-emerald-700 uppercase">Libres</span>
+                  <span className="text-xl md:text-2xl font-black text-emerald-600">{totalDisponibles}</span>
+                </div>
+              </div>
+            ) : esMañanaActual ? (
+              <div className="flex items-center gap-4 bg-white/50 p-2 rounded-2xl border border-slate-100 shadow-sm">
+                <div className="flex flex-col gap-1">
+                  <div className="text-[10px] font-black text-slate-400 uppercase text-center tracking-widest">Turno Mañana</div>
+                  <div className="flex gap-2 md:gap-3 text-center font-mono">
+                    <div className="bg-slate-100 p-2 md:p-3 rounded-xl border border-slate-200 min-w-[70px]">
+                      <span className="block text-[9px] md:text-[10px] font-bold text-slate-500 uppercase">Totales</span>
+                      <span className="text-lg md:text-2xl font-black text-slate-700">{capacidadManana}</span>
+                    </div>
+                    <div className="bg-orange-50 p-2 md:p-3 rounded-xl border border-orange-200 min-w-[70px]">
+                      <span className="block text-[9px] md:text-[10px] font-bold text-orange-700 uppercase">Reservas</span>
+                      <span className="text-lg md:text-2xl font-black text-orange-600">{reservadosManana}</span>
+                    </div>
+                    <div className="bg-emerald-50 p-2 md:p-3 rounded-xl border border-emerald-200 min-w-[70px]">
+                      <span className="block text-[9px] md:text-[10px] font-bold text-emerald-700 uppercase">Libres</span>
+                      <span className="text-lg md:text-2xl font-black text-emerald-600">{disponiblesManana}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex flex-col gap-1 border-l-2 border-slate-200 pl-4">
+                  <div className="text-[9px] font-black text-slate-300 uppercase text-center tracking-widest">Proy. Tarde (Rem: {remanenteManana})</div>
+                  <div className="flex gap-1.5 text-center font-mono opacity-60 hover:opacity-100 transition-opacity">
+                    <div className="bg-slate-50 p-1.5 md:p-2 rounded-lg border border-slate-200 min-w-[45px]">
+                      <span className="block text-[8px] font-bold text-slate-500 uppercase">Total</span>
+                      <span className="text-sm font-black text-slate-700">{capacidadTarde}</span>
+                    </div>
+                    <div className="bg-orange-50/50 p-1.5 md:p-2 rounded-lg border border-orange-200 min-w-[45px]">
+                      <span className="block text-[8px] font-bold text-orange-700 uppercase">Res</span>
+                      <span className="text-sm font-black text-orange-600">{reservadosTarde}</span>
+                    </div>
+                    <div className={`p-1.5 md:p-2 rounded-lg border min-w-[45px] ${balanceTarde < 0 ? 'bg-red-50/50 border-red-200' : 'bg-emerald-50/50 border-emerald-200'}`}>
+                      <span className={`block text-[8px] font-bold uppercase ${balanceTarde < 0 ? 'text-red-700' : 'text-emerald-700'}`}>Libre</span>
+                      <span className={`text-sm font-black ${balanceTarde < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{disponiblesTarde}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-4 bg-white/50 p-2 rounded-2xl border border-slate-100 shadow-sm">
+                <div className="flex flex-col gap-1 pr-4 border-r-2 border-slate-200">
+                  <div className="text-[9px] font-black text-slate-300 uppercase text-center tracking-widest">Mañana (Rem: {remanenteManana})</div>
+                  <div className="flex gap-1.5 text-center font-mono opacity-40 hover:opacity-100 transition-opacity grayscale">
+                    <div className="bg-slate-50 p-1.5 md:p-2 rounded-lg border border-slate-200 min-w-[45px]">
+                      <span className="block text-[8px] font-bold text-slate-500 uppercase">Total</span>
+                      <span className="text-sm font-black text-slate-700">{capacidadManana}</span>
+                    </div>
+                    <div className="bg-orange-50/50 p-1.5 md:p-2 rounded-lg border border-orange-200 min-w-[45px]">
+                      <span className="block text-[8px] font-bold text-orange-700 uppercase">Res</span>
+                      <span className="text-sm font-black text-orange-600">{reservadosManana}</span>
+                    </div>
+                    <div className="bg-emerald-50/50 p-1.5 md:p-2 rounded-lg border border-emerald-200 min-w-[45px]">
+                      <span className="block text-[8px] font-bold text-emerald-700 uppercase">Libre</span>
+                      <span className="text-sm font-black text-emerald-600">{disponiblesManana}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <div className="text-[10px] font-black text-slate-400 uppercase text-center tracking-widest">Turno Tarde</div>
+                  <div className="flex gap-2 md:gap-3 text-center font-mono">
+                    <div className="bg-slate-100 p-2 md:p-3 rounded-xl border border-slate-200 min-w-[70px]">
+                      <span className="block text-[9px] md:text-[10px] font-bold text-slate-500 uppercase">Totales</span>
+                      <span className="text-lg md:text-2xl font-black text-slate-700">{capacidadTarde}</span>
+                    </div>
+                    <div className="bg-orange-50 p-2 md:p-3 rounded-xl border border-orange-200 min-w-[70px]">
+                      <span className="block text-[9px] md:text-[10px] font-bold text-orange-700 uppercase">Reservas</span>
+                      <span className="text-lg md:text-2xl font-black text-orange-600">{reservadosTarde}</span>
+                    </div>
+                    <div className={`p-2 md:p-3 rounded-xl border min-w-[70px] ${balanceTarde < 0 ? 'bg-red-50 border-red-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                      <span className={`block text-[9px] md:text-[10px] font-bold uppercase ${balanceTarde < 0 ? 'text-red-700' : 'text-emerald-700'}`}>Libres</span>
+                      <span className={`text-lg md:text-2xl font-black ${balanceTarde < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{disponiblesTarde}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {}
@@ -948,6 +1082,46 @@ const handleEditarProducto = async (producto) => {
               />
             </div>
             <p className="text-orange-700/70 text-xs mt-3 font-bold uppercase">Esto pre-rellenará el botón al crear una hornada de pollos nueva.</p>
+          </div>
+
+          <div className="bg-indigo-50 p-6 rounded-2xl border-2 border-indigo-200 shadow-sm mb-4">
+            <h2 className="text-xl font-black text-slate-800 uppercase mb-4">⏱️ Configuración de Turnos (Mañana/Tarde)</h2>
+            <div className="flex flex-col sm:flex-row items-center gap-6">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={!!configuracion.modoTurnos}
+                  onChange={async (e) => {
+                    const valor = e.target.checked;
+                    if (configuracion.id) {
+                      await updateDoc(doc(db, 'configuracion', configuracion.id), { modoTurnos: valor });
+                    } else {
+                      await addDoc(collection(db, 'configuracion'), { local: LOCAL_ID, modoTurnos: valor });
+                    }
+                  }}
+                  className="w-6 h-6 text-indigo-600 rounded bg-white border-2 border-slate-300 focus:ring-indigo-500"
+                />
+                <span className="text-sm font-bold text-slate-700 uppercase">Activar Modo Turnos</span>
+              </label>
+
+              {configuracion.modoTurnos && (
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-bold text-slate-600 uppercase">Hora de Corte:</span>
+                  <input 
+                    type="time" 
+                    defaultValue={configuracion.horaCorte || '17:00'} 
+                    onBlur={async (e) => {
+                      const valor = e.target.value;
+                      if (configuracion.id && valor !== configuracion.horaCorte) {
+                        await updateDoc(doc(db, 'configuracion', configuracion.id), { horaCorte: valor });
+                      }
+                    }} 
+                    className="w-32 text-center text-xl font-black bg-white border-4 border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:border-indigo-500 text-indigo-600" 
+                  />
+                </div>
+              )}
+            </div>
+            <p className="text-indigo-700/70 text-xs mt-3 font-bold uppercase">Si se activa, el stock de la mañana remanente pasará a la tarde automáticamente.</p>
           </div>
 
           <div className="bg-slate-50 border-4 border-slate-200 p-6 rounded-2xl flex flex-col md:flex-row justify-between items-center gap-6 shadow-sm">
