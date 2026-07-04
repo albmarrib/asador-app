@@ -144,6 +144,8 @@ export default function ClienteMenu() {
   const [clientSecret, setClientSecret] = useState(null);
   const [procesandoPago, setProcesandoPago] = useState(false);
   const [errorFormulario, setErrorFormulario] = useState('');
+  
+  const [configuracion, setConfiguracion] = useState(null);
 
   useEffect(() => {
     const qFranjas = query(collection(db, 'franjas'), where('local', '==', LOCAL_ID));
@@ -191,12 +193,18 @@ const qPedidos = query(collection(db, 'pedidos'), where('local', '==', LOCAL_ID)
       setHornadas(hornadasActivas);
     });
 
+    const qConfig = query(collection(db, 'configuracion'), where('local', '==', LOCAL_ID));
+    const unsubscribeConfig = onSnapshot(qConfig, (snapshot) => {
+      if (!snapshot.empty) setConfiguracion({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() });
+    });
+
     return () => {
       unsubscribeFranjas();
       unsubscribeProductos();
       unsubscribeCategorias();
       unsubscribePedidos();
       unsubscribeHornadas();
+      unsubscribeConfig();
     };
   }, []);
 
@@ -458,7 +466,12 @@ const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
       const response = await fetch(baseUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: { total: calcularTotal() } })
+        body: JSON.stringify({ 
+          data: { 
+            total: calcularTotal(),
+            stripeAccountId: configuracion?.stripeAccountId || null
+          } 
+        })
       });
       const result = await response.json();
       

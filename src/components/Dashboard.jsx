@@ -42,6 +42,8 @@ export default function Dashboard() {
   const [franjaDetalleSeleccionada, setFranjaDetalleSeleccionada] = useState(null);
   const [modalCierreCajaAbierto, setModalCierreCajaAbierto] = useState(false);
   const [modalEstadisticasAbierto, setModalEstadisticasAbierto] = useState(false);
+  const [modalConfigAbierto, setModalConfigAbierto] = useState(null); // 'franjas', 'categorias', 'carta', 'stripe'
+  const [stripeAccountIdTemp, setStripeAccountIdTemp] = useState('');
 
   const [filtroFechaInicio, setFiltroFechaInicio] = useState(new Date(new Date().setDate(1)).toISOString().split('T')[0]); 
   const [filtroFechaFin, setFiltroFechaFin] = useState(new Date().toISOString().split('T')[0]); 
@@ -746,6 +748,7 @@ const handleEditarProducto = async (producto) => {
 
   return (
     <div className={`fixed inset-0 overflow-hidden overscroll-none flex flex-col ${APP_CONFIG.tema.fondoBase} text-slate-800 p-4 md:p-6 font-sans antialiased`}>
+      {vista !== 'configuracion' && (
       <header className={`shrink-0 z-40 ${APP_CONFIG.tema.headerBg} backdrop-blur-md rounded-2xl p-6 shadow-md border ${APP_CONFIG.tema.bordeClaro} mb-4 relative overflow-hidden`}>
         <div className="absolute top-0 right-0 bg-emerald-500 text-white text-[9px] font-black uppercase px-3 py-1 rounded-bl-xl shadow-sm flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></span> Nube Conectada
@@ -882,6 +885,7 @@ const handleEditarProducto = async (producto) => {
           </div>
         </div>
       </header>
+      )}
 
       {vista === 'mostrador' && franjas.length > 0 && (
         <div className="flex-1 flex flex-col min-h-0">
@@ -1054,161 +1058,246 @@ const handleEditarProducto = async (producto) => {
       )}
 
       {vista === 'configuracion' && (
-        <section className="bg-white rounded-2xl p-6 shadow-sm border border-orange-100 max-w-5xl mx-auto space-y-8 flex-1 overflow-y-auto w-full mb-4">
-          <div className="bg-slate-50 p-6 rounded-2xl border-2 border-indigo-100 shadow-sm">
-            <h2 className="text-xl font-black text-slate-800 uppercase mb-4">🖥️ 0. Preferencias de Pantalla</h2>
-            <div className="flex gap-4">
-              <button onClick={() => setModoLayout('SPLIT')} className={`flex-1 py-4 rounded-xl font-black border-4 cursor-pointer transition-all ${modoLayout === 'SPLIT' ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>MODO CLÁSICO (Dividido)</button>
-              <button onClick={() => setModoLayout('FULL')} className={`flex-1 py-4 rounded-xl font-black border-4 cursor-pointer transition-all ${modoLayout === 'FULL' ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>MODO FULL (Pantalla Completa)</button>
-            </div>
-          </div>
-
-          <div className="bg-orange-50 p-6 rounded-2xl border-2 border-orange-200 shadow-sm mb-4">
-            <h2 className="text-xl font-black text-slate-800 uppercase mb-4">🔥 Capacidad Base de Pollos</h2>
-            <div className="flex flex-col sm:flex-row items-center gap-4">
-              <span className="text-sm font-bold text-slate-600 uppercase">Sugerencia de Carga:</span>
-              <input 
-                type="number" 
-                value={configuracion.capacidadMaxima} 
-                onChange={async (e) => {
-                  const valor = parseInt(e.target.value) || 0;
-                  if (configuracion.id) {
-                    await updateDoc(doc(db, 'configuracion', configuracion.id), { capacidadMaxima: valor });
-                  } else {
-                    await addDoc(collection(db, 'configuracion'), { local: LOCAL_ID, capacidadMaxima: valor });
-                  }
-                }} 
-                className="w-32 text-center text-3xl font-black bg-white border-4 border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:border-orange-500 text-orange-600" 
-              />
-            </div>
-            <p className="text-orange-700/70 text-xs mt-3 font-bold uppercase">Esto pre-rellenará el botón al crear una hornada de pollos nueva.</p>
-          </div>
-
-          <div className="bg-indigo-50 p-6 rounded-2xl border-2 border-indigo-200 shadow-sm mb-4">
-            <h2 className="text-xl font-black text-slate-800 uppercase mb-4">⏱️ Configuración de Turnos (Mañana/Tarde)</h2>
-            <div className="flex flex-col sm:flex-row items-center gap-6">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  checked={!!configuracion.modoTurnos}
-                  onChange={async (e) => {
-                    const valor = e.target.checked;
-                    if (configuracion.id) {
-                      await updateDoc(doc(db, 'configuracion', configuracion.id), { modoTurnos: valor });
-                    } else {
-                      await addDoc(collection(db, 'configuracion'), { local: LOCAL_ID, modoTurnos: valor });
-                    }
-                  }}
-                  className="w-6 h-6 text-indigo-600 rounded bg-white border-2 border-slate-300 focus:ring-indigo-500"
-                />
-                <span className="text-sm font-bold text-slate-700 uppercase">Activar Modo Turnos</span>
-              </label>
-
-              {configuracion.modoTurnos && (
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-bold text-slate-600 uppercase">Hora de Corte:</span>
+        <section className="bg-slate-100 flex-1 flex flex-col items-center justify-center p-6 w-full h-full relative z-0">
+          <div className="w-full max-w-5xl space-y-6">
+            
+            {/* Cabecera / Ajustes Rápidos */}
+            <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="flex items-center gap-4">
+                <span className="text-sm font-black text-slate-400 uppercase tracking-widest">Pantalla:</span>
+                <div className="flex bg-slate-100 p-1 rounded-xl">
+                  <button onClick={() => setModoLayout('SPLIT')} className={`px-4 py-2 rounded-lg font-black text-xs transition-all ${modoLayout === 'SPLIT' ? 'bg-indigo-600 text-white shadow' : 'text-slate-500 hover:text-slate-700'}`}>CLÁSICO</button>
+                  <button onClick={() => setModoLayout('FULL')} className={`px-4 py-2 rounded-lg font-black text-xs transition-all ${modoLayout === 'FULL' ? 'bg-indigo-600 text-white shadow' : 'text-slate-500 hover:text-slate-700'}`}>FULL</button>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-4 border-l border-slate-200 pl-6">
+                <span className="text-sm font-black text-slate-400 uppercase tracking-widest">Turnos:</span>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={!!configuracion.modoTurnos}
+                    onChange={async (e) => {
+                      const valor = e.target.checked;
+                      if (configuracion.id) await updateDoc(doc(db, 'configuracion', configuracion.id), { modoTurnos: valor });
+                      else await addDoc(collection(db, 'configuracion'), { local: LOCAL_ID, modoTurnos: valor });
+                    }}
+                    className="w-5 h-5 text-indigo-600 rounded bg-white border-2 border-slate-300"
+                  />
+                </label>
+                {configuracion.modoTurnos && (
                   <input 
                     type="time" 
                     defaultValue={configuracion.horaCorte || '17:00'} 
                     onBlur={async (e) => {
                       const valor = e.target.value;
-                      if (configuracion.id && valor !== configuracion.horaCorte) {
-                        await updateDoc(doc(db, 'configuracion', configuracion.id), { horaCorte: valor });
-                      }
+                      if (configuracion.id && valor !== configuracion.horaCorte) await updateDoc(doc(db, 'configuracion', configuracion.id), { horaCorte: valor });
                     }} 
-                    className="w-32 text-center text-xl font-black bg-white border-4 border-slate-200 rounded-xl px-4 py-2 focus:outline-none focus:border-indigo-500 text-indigo-600" 
+                    className="w-24 text-center font-black bg-slate-50 border-2 border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:border-indigo-500 text-indigo-600 text-sm" 
                   />
-                </div>
-              )}
-            </div>
-            <p className="text-indigo-700/70 text-xs mt-3 font-bold uppercase">Si se activa, el stock de la mañana remanente pasará a la tarde automáticamente.</p>
-          </div>
-
-          <div className="bg-slate-50 border-4 border-slate-200 p-6 rounded-2xl flex flex-col md:flex-row justify-between items-center gap-6 shadow-sm">
-            <div className="w-full md:w-auto flex flex-col sm:flex-row gap-4">
-              <button onClick={() => setVista('mostrador')} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-6 py-4 rounded-xl uppercase text-sm shadow cursor-pointer border-b-4 border-emerald-800 active:scale-95 transition-all">💾 Volver al Mostrador</button>
-              <button onClick={() => setModalCierreCajaAbierto(true)} className="bg-rose-600 hover:bg-rose-700 text-white font-black px-4 py-4 rounded-xl shadow-md uppercase text-sm cursor-pointer active:scale-95 transition-all border-b-4 border-rose-800">🧹 Cerrar Caja</button>
-              <button onClick={() => setModalEstadisticasAbierto(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black px-6 py-4 rounded-xl shadow-md uppercase text-sm cursor-pointer active:scale-95 transition-all border-b-4 border-indigo-800">📊 Estadísticas</button>
-            </div>
-          </div>
-
-          <div className="border-b pb-4 flex justify-between items-center">
-            <div>
-              <h2 className="text-2xl font-black text-slate-800 uppercase">⏱️ 1. Estructura de Horarios</h2>
-              <p className="text-slate-500 text-xs mt-0.5">Define los tramos de horas de reparto del negocio.</p>
-            </div>
-            <button onClick={handleCrearFranjaNueva} className="bg-slate-800 hover:bg-slate-700 text-white font-black px-4 py-2.5 rounded-xl text-xs cursor-pointer shadow-sm">➕ Crear Tramo</button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {franjas.map(f => (
-              <div key={f.id} className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-center justify-between">
-                <span className="text-lg font-mono font-black text-slate-700">⏰ {f.hora}</span>
-                <button onClick={() => handleBorrarFranjaConfig(f.id)} className="text-rose-500 font-black text-xs uppercase px-3 py-2 bg-rose-50 rounded-lg border border-rose-200 cursor-pointer">🗑 Borrar</button>
+                )}
               </div>
-            ))}
-          </div>
 
-          <div className="flex justify-between items-start border-b border-slate-100 pb-4 mb-4">
-            <div>
-              <h2 className="text-xl font-black text-slate-800 uppercase">🗂️ 2. Categorías de la Carta</h2>
-            </div>
-            <button onClick={handleCrearCategoria} className="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 font-black px-4 py-2.5 rounded-xl text-xs border border-indigo-300 cursor-pointer shadow-sm">➕ Crear Categoría</button>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-8">
-            {categorias.length === 0 && (
-              <div className="col-span-full p-4 text-center text-slate-400 font-bold text-xs uppercase bg-white border border-dashed border-slate-300 rounded-xl">Aún no has creado ninguna categoría.</div>
-            )}
-            {categorias.map(cat => (
-              <div key={cat.id} className="bg-indigo-50 border border-indigo-100 p-3 rounded-xl flex justify-between items-center group">
-                <span className="font-black text-indigo-800 text-sm truncate uppercase">{cat.nombre}</span>
-                <div className="flex gap-2">
-                  <button onClick={() => handleEditarCategoria(cat)} className="text-indigo-400 hover:text-indigo-600">✏️</button>
-                  <button onClick={() => handleBorrarCategoria(cat.id)} className="text-rose-400 hover:text-rose-600">🗑</button>
-                </div>
+              <div className="flex items-center gap-4 border-l border-slate-200 pl-6">
+                <span className="text-sm font-black text-slate-400 uppercase tracking-widest">Carga Máx:</span>
+                <input 
+                  type="number" 
+                  value={configuracion.capacidadMaxima} 
+                  onChange={async (e) => {
+                    const valor = parseInt(e.target.value) || 0;
+                    if (configuracion.id) await updateDoc(doc(db, 'configuracion', configuracion.id), { capacidadMaxima: valor });
+                    else await addDoc(collection(db, 'configuracion'), { local: LOCAL_ID, capacidadMaxima: valor });
+                  }} 
+                  className="w-20 text-center font-black bg-orange-50 border-2 border-orange-200 rounded-lg px-2 py-1 text-orange-600 focus:outline-none" 
+                />
               </div>
-            ))}
-          </div>
-
-          <div className="flex justify-between items-start border-b border-slate-100 pb-4 mb-4">
-            <div>
-              <h2 className="text-xl font-black text-slate-800 uppercase">🍟 3. Carta y Control de Stock</h2>
             </div>
-            <button onClick={handleCrearProductoNuevo} className="bg-orange-100 text-orange-700 hover:bg-orange-200 font-black px-4 py-2.5 rounded-xl text-xs border border-orange-300 cursor-pointer shadow-sm">➕ Añadir Producto</button>
-          </div>
-          <div className="space-y-3">
-            {productosOrdenados.map(p => (
-              <div key={p.id} className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-black text-slate-800 uppercase tracking-tight">{p.nombre}</h3>
-                    {(() => {
-                      const miCat = categorias.find(c => c.id === p.categoriaId);
-                      return miCat ? (
-                        <span className="text-[9px] font-black bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-md border border-indigo-100 uppercase tracking-wider">📁 {miCat.nombre}</span>
-                      ) : (
-                        <span className="text-[9px] font-black bg-rose-50 text-rose-500 px-2 py-0.5 rounded-md border border-rose-100 uppercase tracking-wider">⚠️ SIN CATEGORÍA</span>
-                      );
-                    })()}
-                  </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-orange-600 font-black text-sm">{parseFloat(p.precio).toFixed(2)}€</span>
-                    {p.controlaStock && <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded uppercase border border-emerald-200">Restará: {p.consumeUnidades} ud. por hornada</span>}
-                  </div>
-                </div>
-                
-                <div className="flex gap-1">
-                  <div className="flex flex-col gap-1 mr-2">
-                    <button onClick={() => handleMoverProducto(p, 'SUBIR')} className="text-slate-500 bg-slate-100 w-8 h-6 rounded font-black text-xs hover:bg-slate-200 cursor-pointer">▲</button>
-                    <button onClick={() => handleMoverProducto(p, 'BAJAR')} className="text-slate-500 bg-slate-100 w-8 h-6 rounded font-black text-xs hover:bg-slate-200 cursor-pointer">▼</button>
-                  </div>
-                  <button onClick={() => handleEditarProducto(p)} className="text-indigo-600 bg-indigo-50 px-3 py-2 rounded-lg font-bold text-xs uppercase border border-indigo-100 cursor-pointer hover:bg-indigo-100 transition-colors">✏️ Editar</button>
-                  <button onClick={() => handleBorrarProductoConfig(p.id)} className="text-rose-500 bg-rose-50 px-3 py-2 rounded-lg font-bold text-xs uppercase border border-rose-100 cursor-pointer hover:bg-rose-100 transition-colors">🗑 Borrar</button>
-                </div>
-              </div>
-            ))}
-          </div>
 
+            {/* Grid Principal */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+              
+              <button onClick={() => setModalConfigAbierto('franjas')} className="bg-white hover:bg-slate-50 transition-all p-8 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col items-center justify-center gap-4 group cursor-pointer active:scale-95">
+                <span className="text-5xl group-hover:scale-110 transition-transform">🕒</span>
+                <span className="font-black text-slate-700 uppercase tracking-wide text-sm text-center">Franjas Horarias</span>
+              </button>
+
+              <button onClick={() => setModalConfigAbierto('categorias')} className="bg-white hover:bg-indigo-50 transition-all p-8 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col items-center justify-center gap-4 group cursor-pointer active:scale-95">
+                <span className="text-5xl group-hover:scale-110 transition-transform">🗂️</span>
+                <span className="font-black text-slate-700 uppercase tracking-wide text-sm text-center">Categorías</span>
+              </button>
+
+              <button onClick={() => setModalConfigAbierto('carta')} className="bg-white hover:bg-orange-50 transition-all p-8 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col items-center justify-center gap-4 group cursor-pointer active:scale-95">
+                <span className="text-5xl group-hover:scale-110 transition-transform">🍟</span>
+                <span className="font-black text-slate-700 uppercase tracking-wide text-sm text-center">Carta y Stock</span>
+              </button>
+
+              <button onClick={() => setModalEstadisticasAbierto(true)} className="bg-white hover:bg-emerald-50 transition-all p-8 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col items-center justify-center gap-4 group cursor-pointer active:scale-95">
+                <span className="text-5xl group-hover:scale-110 transition-transform">📊</span>
+                <span className="font-black text-slate-700 uppercase tracking-wide text-sm text-center">Estadísticas</span>
+              </button>
+
+              <button onClick={() => setModalCierreCajaAbierto(true)} className="bg-white hover:bg-rose-50 transition-all p-8 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col items-center justify-center gap-4 group cursor-pointer active:scale-95">
+                <span className="text-5xl group-hover:scale-110 transition-transform">🧹</span>
+                <span className="font-black text-slate-700 uppercase tracking-wide text-sm text-center">Cierre de Caja</span>
+              </button>
+
+              <button onClick={() => { setStripeAccountIdTemp(configuracion.stripeAccountId || ''); setModalConfigAbierto('stripe'); }} className="bg-white hover:bg-blue-50 transition-all p-8 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col items-center justify-center gap-4 group cursor-pointer active:scale-95">
+                <span className="text-5xl group-hover:scale-110 transition-transform">💳</span>
+                <span className="font-black text-slate-700 uppercase tracking-wide text-sm text-center">Datos Bancarios (Admin)</span>
+              </button>
+
+            </div>
+
+            {/* Botón Volver */}
+            <div className="flex justify-center pt-8">
+              <button onClick={() => setVista('mostrador')} className="bg-slate-800 hover:bg-slate-900 text-white font-black px-12 py-5 rounded-2xl shadow-xl uppercase tracking-widest text-sm transition-all active:scale-95 border-b-4 border-slate-950 flex items-center gap-3">
+                <span className="text-xl">🏪</span> VOLVER AL MOSTRADOR
+              </button>
+            </div>
+            
+          </div>
         </section>
+      )}
+
+      {/* MODALES DE CONFIGURACIÓN */}
+      
+      {modalConfigAbierto === 'franjas' && (
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl flex flex-col overflow-hidden max-h-[80vh]">
+            <div className="bg-slate-800 p-6 flex justify-between items-center text-white shrink-0">
+              <h3 className="text-2xl font-black uppercase tracking-tight">🕒 Tramos Horarios</h3>
+              <button onClick={() => setModalConfigAbierto(null)} className="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-xl font-bold uppercase text-xs">Cerrar</button>
+            </div>
+            <div className="p-6 overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <p className="text-slate-500 text-sm font-bold uppercase">Define las horas de recogida.</p>
+                <button onClick={handleCrearFranjaNueva} className="bg-slate-800 text-white font-black px-4 py-2 rounded-xl text-xs uppercase shadow">➕ Añadir Tramo</button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {franjas.map(f => (
+                  <div key={f.id} className="bg-slate-50 p-4 rounded-xl border flex flex-col items-center justify-center gap-3">
+                    <span className="font-black text-2xl tracking-tighter">⏰ {f.hora}</span>
+                    <button onClick={() => handleBorrarFranjaConfig(f.id)} className="text-rose-500 font-black text-xs bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-lg uppercase hover:bg-rose-100">Borrar</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalConfigAbierto === 'categorias' && (
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white w-full max-w-3xl rounded-[2rem] shadow-2xl flex flex-col overflow-hidden max-h-[80vh]">
+            <div className="bg-indigo-600 p-6 flex justify-between items-center text-white shrink-0">
+              <h3 className="text-2xl font-black uppercase tracking-tight">🗂️ Categorías de la Carta</h3>
+              <button onClick={() => setModalConfigAbierto(null)} className="bg-indigo-700 hover:bg-indigo-500 px-4 py-2 rounded-xl font-bold uppercase text-xs">Cerrar</button>
+            </div>
+            <div className="p-6 overflow-y-auto">
+              <button onClick={handleCrearCategoria} className="mb-6 bg-indigo-100 text-indigo-700 font-black px-4 py-3 rounded-xl text-sm w-full text-center border border-indigo-200 shadow-sm uppercase">➕ Crear Nueva Categoría</button>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {categorias.map(cat => (
+                  <div key={cat.id} className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex justify-between items-center">
+                    <span className="font-black text-indigo-800 uppercase">{cat.nombre}</span>
+                    <div className="flex gap-2">
+                      <button onClick={() => handleEditarCategoria(cat)} className="text-indigo-600 bg-white border border-indigo-200 px-3 py-2 rounded-lg font-bold text-xs uppercase hover:bg-indigo-50">Editar</button>
+                      <button onClick={() => handleBorrarCategoria(cat.id)} className="text-rose-500 bg-white border border-rose-200 px-3 py-2 rounded-lg font-bold text-xs uppercase hover:bg-rose-50">Borrar</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalConfigAbierto === 'carta' && (
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white w-full max-w-4xl rounded-[2rem] shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
+            <div className="bg-orange-600 p-6 flex justify-between items-center text-white shrink-0">
+              <h3 className="text-2xl font-black uppercase tracking-tight">🍟 Carta y Stock</h3>
+              <button onClick={() => setModalConfigAbierto(null)} className="bg-orange-700 hover:bg-orange-500 px-4 py-2 rounded-xl font-bold uppercase text-xs">Cerrar</button>
+            </div>
+            <div className="p-6 overflow-y-auto bg-slate-50">
+              <button onClick={handleCrearProductoNuevo} className="mb-6 bg-orange-100 text-orange-700 font-black px-4 py-4 rounded-xl text-sm w-full text-center border-2 border-orange-200 shadow-sm uppercase">➕ Añadir Nuevo Producto a la Carta</button>
+              <div className="space-y-3">
+                {productosOrdenados.map(p => (
+                  <div key={p.id} className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-black text-slate-800 uppercase text-lg">{p.nombre}</h3>
+                        {(() => {
+                          const miCat = categorias.find(c => c.id === p.categoriaId);
+                          return miCat ? (
+                            <span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded border border-indigo-100 uppercase">📁 {miCat.nombre}</span>
+                          ) : (
+                            <span className="text-[10px] font-black bg-rose-50 text-rose-500 px-2 py-0.5 rounded border border-rose-100 uppercase">⚠️ SIN CATEGORÍA</span>
+                          );
+                        })()}
+                      </div>
+                      <div className="flex items-center gap-3 mt-2">
+                        <span className="text-orange-600 font-black text-lg">{parseFloat(p.precio).toFixed(2)}€</span>
+                        {p.controlaStock && <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded uppercase border border-emerald-200">Resta de Hornada: {p.consumeUnidades} ud.</span>}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 w-full md:w-auto justify-end">
+                      <div className="flex flex-col gap-1">
+                        <button onClick={() => handleMoverProducto(p, 'SUBIR')} className="bg-slate-100 px-3 py-1 rounded text-xs hover:bg-slate-200 font-black text-slate-500">▲</button>
+                        <button onClick={() => handleMoverProducto(p, 'BAJAR')} className="bg-slate-100 px-3 py-1 rounded text-xs hover:bg-slate-200 font-black text-slate-500">▼</button>
+                      </div>
+                      <button onClick={() => handleEditarProducto(p)} className="text-indigo-600 bg-indigo-50 px-4 rounded-lg font-bold text-xs uppercase border border-indigo-100 hover:bg-indigo-100 transition">Editar</button>
+                      <button onClick={() => handleBorrarProductoConfig(p.id)} className="text-rose-500 bg-rose-50 px-4 rounded-lg font-bold text-xs uppercase border border-rose-100 hover:bg-rose-100 transition">Borrar</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {modalConfigAbierto === 'stripe' && (
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white w-full max-w-lg rounded-[2rem] shadow-2xl flex flex-col overflow-hidden">
+            <div className="bg-blue-600 p-6 flex justify-between items-center text-white shrink-0">
+              <h3 className="text-2xl font-black uppercase tracking-tight">💳 Ajustes de Cobro (Soporte)</h3>
+              <button onClick={() => setModalConfigAbierto(null)} className="bg-blue-700 hover:bg-blue-500 px-4 py-2 rounded-xl font-bold uppercase text-xs">Cancelar</button>
+            </div>
+            <div className="p-8">
+              <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl mb-6 text-sm text-blue-800">
+                <p className="font-black mb-2 uppercase">Área exclusiva para el Administrador</p>
+                <p className="font-medium leading-relaxed">Esta sección sirve para enrutar los pagos online de este local a su cuenta bancaria de Stripe. <strong>Atención empleados:</strong> No modifiquéis este valor sin consultar con soporte técnico.</p>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-black text-slate-500 uppercase mb-2">ID de Cuenta Conectada (Stripe):</label>
+                  <input 
+                    type="text" 
+                    placeholder="Ej. acct_1234567890" 
+                    value={stripeAccountIdTemp}
+                    onChange={(e) => setStripeAccountIdTemp(e.target.value)}
+                    className="w-full bg-slate-50 border-2 border-slate-200 p-4 rounded-xl font-mono text-slate-800 focus:outline-none focus:border-blue-500"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-2 font-bold uppercase">Dejar el campo vacío para hacer cobros de prueba a la cuenta principal.</p>
+                </div>
+                <button 
+                  onClick={async () => {
+                    const idLimpio = stripeAccountIdTemp.trim();
+                    if (configuracion.id) {
+                      await updateDoc(doc(db, 'configuracion', configuracion.id), { stripeAccountId: idLimpio });
+                    } else {
+                      await addDoc(collection(db, 'configuracion'), { local: LOCAL_ID, stripeAccountId: idLimpio });
+                    }
+                    setModalConfigAbierto(null);
+                  }} 
+                  className="w-full bg-slate-800 hover:bg-slate-900 text-white font-black py-4 rounded-xl uppercase text-sm mt-4 shadow-lg active:scale-95 transition-all"
+                >
+                  Guardar ID de Stripe
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {modalProduccionAbierto && (() => {
