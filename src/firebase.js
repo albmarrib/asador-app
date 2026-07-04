@@ -3,6 +3,7 @@ import { initializeApp } from "firebase/app";
 // Importamos la función para acceder a la base de datos en tiempo real
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 
 // Las credenciales exactas de tu proyecto 'asador-saas'
 const firebaseConfig = {
@@ -21,4 +22,10 @@ const app = initializeApp(firebaseConfig);
 // para que el Dashboard y el ClienteMenu puedan leer y escribir en ella.
 export const db = getFirestore(app);
 export const auth = getAuth(app);
+export const functions = getFunctions(app);
 
+// Use local emulator in development mode
+if (import.meta.env.DEV) {
+  // window.location.hostname permite que funcione tanto en tu PC (localhost) como en el móvil (IP)
+  connectFunctionsEmulator(functions, window.location.hostname, 5001);
+}

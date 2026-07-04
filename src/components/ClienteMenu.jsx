@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
+import { db, functions } from '../firebase';
 import { collection, onSnapshot, addDoc, query, where } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements } from '@stripe/react-stripe-js';
+import StripeCheckout from './StripeCheckout';
+
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
 
 const LOCAL_ID = 'asador-dc'; 
 
@@ -132,6 +138,11 @@ export default function ClienteMenu() {
   const [nombreCliente, setNombreCliente] = useState('');
   const [pedidoConfirmado, setPedidoConfirmado] = useState(false);
   const [ticketId, setTicketId] = useState('');
+
+  // Stripe States
+  const [opcionesPagoVisible, setOpcionesPagoVisible] = useState(false);
+  const [clientSecret, setClientSecret] = useState(null);
+  const [procesandoPago, setProcesandoPago] = useState(false);
   const [errorFormulario, setErrorFormulario] = useState('');
 
   useEffect(() => {
@@ -362,48 +373,31 @@ return total;
 const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
  
 
-  // --- ENVIAR A FIREBASE ---
-  const handleEnviarReserva = async (e) => {
-    e.preventDefault();
+  const validarPedido = () => {
     setErrorFormulario('');
-
     if (totalArticulos === 0) {
       setErrorFormulario('⚠️ Tu pedido está vacío.');
-      return;
+      return false;
     }
     if (!horaRecogida) {
       setErrorFormulario('⚠️ Selecciona a qué hora pasarás a recoger la comida.');
-      return;
+      return false;
     }
     if (!nombreCliente.trim()) {
       setErrorFormulario('⚠️ Dinos tu nombre para rotular tu pedido.');
-      return;
+      return false;
     }
 
-    const unidadesConsumidas = calcularPollosConsumidos();
-    const lineasTicket = [];
-    Object.entries(carrito).forEach(([id, cant]) => {
-      const p = productos.find(x => x.id === id);
-      if (p) lineasTicket.push(`${cant}x ${p.nombre}`);
-    });
-    
-    // TRUCO: Empezamos el texto con el número de unidades consumidas (ej: "1.5 | ...")
-    // Así la tablet del asador podrá leer este número al instante y descontarlo del stock.
-    const detalleTexto = `${unidadesConsumidas} | ` + lineasTicket.join(' + ');
-
-// BLOQUEO FINAL DE SEGURIDAD PARA LA PAELLA
     if (tienePaella) {
-      // Contamos cuántas raciones reales de paella ha metido el cliente en su carrito
       let racionesPaella = 0;
       Object.entries(carrito).forEach(([id, cant]) => {
         const p = productos.find(x => x.id === id);
         if (p && p.nombre.toUpperCase().includes('PAELLA')) racionesPaella = cant;
       });
 
-      // Si intenta pedir menos de 2 raciones, frenamos el envío del formulario
       if (racionesPaella < 2) {
         setErrorFormulario('⚠️ LA PAELLA DEBE SER COMO MÍNIMO PARA 2 PERSONAS.');
-        return;
+        return false;
       }
 
       const ahora = new Date();
@@ -412,45 +406,113 @@ const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
       fechaReserva.setHours(parseInt(horas), parseInt(minutos), 0, 0);
       if (fechaReserva.getTime() - ahora.getTime() < 120 * 60 * 1000) {
         setErrorFormulario('⚠️ LA PAELLA REQUIERE MÍNIMO 2 HORAS DE ANTELACIÓN.');
-        return;
+        return false;
       }
     }
+    return true;
+  };
 
-      try {
+  const handleEnviarReserva = async (e) => {
+    e.preventDefault();
+    if (!validarPedido()) return;
+
+    const unidadesConsumidas = calcularPollosConsumidos();
+    const lineasTicket = [];
+    Object.entries(carrito).forEach(([id, cant]) => {
+      const p = productos.find(x => x.id === id);
+      if (p) lineasTicket.push(`${cant}x ${p.nombre}`);
+    });
+    
+    const detalleTexto = `${unidadesConsumidas} | ` + lineasTicket.join(' + ');
+
+    try {
       const docRef = await addDoc(collection(db, 'pedidos'), {
-      local: LOCAL_ID,
-      cliente: nombreCliente.trim().toUpperCase(),
-      hora: horaRecogida,
-      detalle: detalleTexto,
-      entregado: false,
-      cobrado: false, // OBLIGATORIO PARA QUE EL MOSTRADOR LO SEPA
-      fianza: tienePaella ? 'pendiente' : null, // MARCAZO DE LA SARTÉN
-      origen: 'QR', 
-      creadoEn: new Date()
+        local: LOCAL_ID,
+        cliente: nombreCliente.trim().toUpperCase(),
+        hora: horaRecogida,
+        detalle: detalleTexto,
+        entregado: false,
+        cobrado: false,
+        metodoPago: 'mostrador',
+        fianza: tienePaella ? 'pendiente' : null,
+        origen: 'QR', 
+        creadoEn: new Date()
       });
 
-
-      setTicketId(docRef.id.slice(-4).toUpperCase()); 
+      // Guardamos el ID real de Firestore para poder actualizarlo si pagan después
+      setTicketId(docRef.id); 
       setPedidoConfirmado(true);
     } catch (error) {
-      setErrorFormulario('❌ Hubo un error de conexión. Inténtalo de nuevo.');
+      setErrorFormulario('❌ Hubo un error de conexión al guardar el pedido. Inténtalo de nuevo.');
     }
   };
 
+  const handlePagarAhora = async () => {
+    setProcesandoPago(true);
+    try {
+      // Usamos fetch directamente porque es más fiable en red local que el SDK de emuladores
+      const baseUrl = import.meta.env.DEV 
+        ? `http://${window.location.hostname}:5001/asador-dev/us-central1/createStripePaymentIntent`
+        : 'https://us-central1-asador-saas.cloudfunctions.net/createStripePaymentIntent';
+        
+      const response = await fetch(baseUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: { total: calcularTotal() } })
+      });
+      const result = await response.json();
+      
+      if (result.result && result.result.clientSecret) {
+        setClientSecret(result.result.clientSecret);
+        setOpcionesPagoVisible(true);
+      } else {
+        throw new Error("No se pudo obtener el client secret");
+      }
+    } catch (error) {
+      console.error(error);
+      alert('Error al contactar con el servidor. ¿Está encendido el emulador?');
+    }
+    setProcesandoPago(false);
+  };
+
   if (pedidoConfirmado) {
+    if (opcionesPagoVisible && clientSecret) {
+      return (
+        <div className="min-h-screen bg-orange-50/40 p-4 flex items-center justify-center font-sans antialiased">
+          <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'stripe' } }}>
+            <StripeCheckout 
+              onPagoExitoso={async () => {
+                // Actualizamos el pedido en la base de datos a COBRADO = true
+                const { updateDoc, doc } = await import('firebase/firestore');
+                await updateDoc(doc(db, 'pedidos', ticketId), { cobrado: true, metodoPago: 'stripe' });
+                setOpcionesPagoVisible(false); // Volvemos al ticket pero ya saldrá como pagado
+                // Un pequeño truco visual: recargamos la info local
+                setClientSecret('pagado'); 
+              }}
+              onVolver={() => setOpcionesPagoVisible(false)}
+              montoTotal={calcularTotal()}
+            />
+          </Elements>
+        </div>
+      );
+    }
+
+    const estaPagadoVisual = clientSecret === 'pagado';
+
     return (
       <div className="min-h-screen bg-orange-50/40 p-4 flex items-center justify-center font-sans antialiased">
         <div className="bg-white rounded-3xl p-6 shadow-xl border border-emerald-100 max-w-md w-full text-center space-y-6">
-          <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center text-3xl mx-auto animate-bounce">✓</div>
+          <div className={`w-16 h-16 ${estaPagadoVisual ? 'bg-emerald-500 text-white' : 'bg-emerald-100 text-emerald-600'} rounded-full flex items-center justify-center text-3xl mx-auto animate-bounce`}>✓</div>
           <div>
             <h2 className="text-2xl font-black text-slate-800 uppercase tracking-tight">¡Reserva Confirmada!</h2>
             <p className="text-slate-500 text-sm mt-1">Ya lo tenemos apuntado en las espadas del asador.</p>
           </div>
 
-          <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-5 text-left space-y-3 font-mono">
+          <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-5 text-left space-y-3 font-mono relative overflow-hidden">
+            {estaPagadoVisual && <div className="absolute top-0 right-0 bg-emerald-500 text-white font-black px-3 py-1 text-[10px] rounded-bl-lg">PAGADO</div>}
             <div className="flex justify-between border-b border-slate-200 pb-2">
               <span className="font-bold text-slate-400 text-xs">Nº DE PEDIDO:</span>
-              <span className="font-black text-orange-600 text-sm">#{ticketId}</span>
+              <span className="font-black text-orange-600 text-sm">#{ticketId.slice(-4).toUpperCase()}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-xs text-slate-500">CLIENTE:</span>
@@ -473,23 +535,44 @@ const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
                 );
               })}
             </div>
-<div className="flex flex-col border-t border-slate-200 pt-2 font-black text-slate-800 text-base">
-  <div className="flex justify-between w-full">
-    <span>TOTAL A PAGAR:</span>
-    <span>{calcularTotal().toFixed(2)}€</span>
-  </div>
-  {tienePaella && (
-    <span className="text-[10px] text-amber-600 font-bold mt-1 text-right italic">+ 20.00€ FIANZA (A pagar al recoger)</span>
-  )}
-</div>
-
+            <div className="flex flex-col border-t border-slate-200 pt-2 font-black text-slate-800 text-base">
+              <div className="flex justify-between w-full">
+                <span>TOTAL A PAGAR:</span>
+                <span>{calcularTotal().toFixed(2)}€</span>
+              </div>
+              {tienePaella && (
+                <span className="text-[10px] text-amber-600 font-bold mt-1 text-right italic">+ 20.00€ FIANZA (A pagar al recoger)</span>
+              )}
+            </div>
           </div>
-          <p className="text-xs text-slate-400 font-bold bg-slate-100 p-3 rounded-xl">Paga cómodamente con tarjeta o efectivo al recogerlo en el mostrador. ¡Gracias!</p>
-          <button onClick={() => window.location.reload()} className="w-full bg-slate-800 text-white font-bold py-3 rounded-xl text-xs uppercase cursor-pointer">Hacer otro pedido</button>
+          
+          {!estaPagadoVisual ? (
+            <div className="space-y-3">
+              <button
+                onClick={handlePagarAhora}
+                disabled={procesandoPago}
+                className="w-full bg-black text-white py-4 px-5 rounded-2xl shadow-lg flex justify-between items-center text-sm font-black uppercase tracking-wider transition-all hover:bg-gray-800 disabled:opacity-50"
+              >
+                <span>💳 Pagar Ahora (Tarjeta / Apple Pay)</span>
+                <span>{procesandoPago ? '⌛' : '⚡'}</span>
+              </button>
+              
+              <button
+                onClick={() => window.location.reload()}
+                className="w-full bg-orange-100 text-orange-900 py-4 px-5 rounded-2xl shadow-sm flex justify-center items-center text-sm font-black uppercase tracking-wider transition-all hover:bg-orange-200"
+              >
+                <span>Pagaré al recogerlo</span>
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => window.location.reload()} className="w-full bg-slate-800 text-white font-bold py-3 rounded-xl text-xs uppercase cursor-pointer">Hacer otro pedido</button>
+          )}
         </div>
       </div>
     );
   }
+
+
 
 return (
 <div className={`min-h-screen ${APP_CONFIG.tema.fondoBase} text-slate-800 pb-56 font-sans antialiased`}>
