@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   PaymentElement,
+  ExpressCheckoutElement,
   useStripe,
   useElements
 } from '@stripe/react-stripe-js';
@@ -12,7 +13,7 @@ export default function StripeCheckout({ onPagoExitoso, onVolver, montoTotal }) 
   const [isProcessing, setIsProcessing] = useState(false);
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
 
     if (!stripe || !elements) {
       return;
@@ -24,8 +25,7 @@ export default function StripeCheckout({ onPagoExitoso, onVolver, montoTotal }) 
       elements,
       redirect: 'if_required', // No redirigir de página completa si se puede evitar
       confirmParams: {
-        // En una app real de producción aquí podrías poner la URL de retorno
-        // return_url: window.location.origin + '/pago-completado',
+        return_url: window.location.href, // Obligatorio para tarjetas europeas (3D Secure)
       },
     });
 
@@ -44,7 +44,13 @@ export default function StripeCheckout({ onPagoExitoso, onVolver, montoTotal }) 
       <p className="text-slate-500 text-sm">Total a pagar: <span className="font-bold text-orange-600">{montoTotal.toFixed(2)}€</span></p>
       
       <form onSubmit={handleSubmit} className="space-y-6 text-left">
-        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 min-h-[60px]">
+        <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 min-h-[60px] space-y-4">
+          <ExpressCheckoutElement onConfirm={handleSubmit} />
+          <div className="relative flex items-center py-2">
+            <div className="flex-grow border-t border-slate-300"></div>
+            <span className="flex-shrink-0 mx-4 text-slate-400 text-sm font-medium">O pagar con tarjeta</span>
+            <div className="flex-grow border-t border-slate-300"></div>
+          </div>
           <PaymentElement />
         </div>
         
