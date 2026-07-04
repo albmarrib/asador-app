@@ -459,9 +459,10 @@ const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
     setProcesandoPago(true);
     try {
       // Usamos fetch directamente porque es más fiable en red local que el SDK de emuladores
+      const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
       const baseUrl = import.meta.env.DEV 
-        ? `http://${window.location.hostname}:5001/asador-dev/us-central1/createStripePaymentIntent`
-        : 'https://us-central1-asador-saas.cloudfunctions.net/createStripePaymentIntent';
+        ? `http://${window.location.hostname}:5001/${projectId}/us-central1/createStripePaymentIntent`
+        : `https://us-central1-${projectId}.cloudfunctions.net/createStripePaymentIntent`;
         
       const response = await fetch(baseUrl, {
         method: 'POST',
