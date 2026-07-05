@@ -6,40 +6,52 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 exports.createStripePaymentIntent = functions.https.onCall(async (data, context) => {
   try {
-    const { total, stripeAccountId } = data;
+    const { total, stripeAccountId, returnUrl, ticketId } = data;
 
     if (!total || total <= 0) {
       throw new functions.https.HttpsError('invalid-argument', 'El total debe ser mayor a 0');
     }
 
-    // Stripe expects amount in cents
+    if (!returnUrl || !ticketId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Faltan parámetros de redirección');
+    }
+
     const amountInCents = Math.round(total * 100);
 
-    const paymentIntentConfig = {
-      amount: amountInCents,
-      currency: 'eur',
-      payment_method_types: ['card'],
-      // For future SaaS commission, you could add:
-      // application_fee_amount: 100, // 1€ in cents
+    const sessionConfig = {
+      payment_method_types: ['card'], // Incluye Apple Pay y Google Pay en Checkout
+      line_items: [
+        {
+          price_data: {
+            currency: 'eur',
+            product_data: {
+              name: 'Pedido de comida - Asador',
+            },
+            unit_amount: amountInCents,
+          },
+          quantity: 1,
+        },
+      ],
+      mode: 'payment',
+      success_url: `${returnUrl}?success=true&ticketId=${ticketId}`,
+      cancel_url: `${returnUrl}?cancel=true&ticketId=${ticketId}`,
     };
 
-    let paymentIntent;
+    let session;
 
-    // Si pasamos el ID de la cuenta conectada del asador, hacemos un Direct Charge (el dinero va a él).
-    // Si no, lo hacemos en la cuenta principal de la plataforma (útil para pruebas antes de conectar al asador).
     if (stripeAccountId) {
-      paymentIntent = await stripe.paymentIntents.create(paymentIntentConfig, {
+      session = await stripe.checkout.sessions.create(sessionConfig, {
         stripeAccount: stripeAccountId,
       });
     } else {
-      paymentIntent = await stripe.paymentIntents.create(paymentIntentConfig);
+      session = await stripe.checkout.sessions.create(sessionConfig);
     }
 
     return {
-      clientSecret: paymentIntent.client_secret,
+      url: session.url,
     };
   } catch (error) {
-    console.error('Error creando PaymentIntent:', error);
+    console.error('Error creando Checkout Session:', error);
     throw new functions.https.HttpsError('internal', 'Error al procesar el pago.');
   }
 });

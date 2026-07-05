@@ -3,8 +3,6 @@ import { db, functions } from '../firebase';
 import { collection, onSnapshot, addDoc, query, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { loadStripe } from '@stripe/stripe-js';
-import { Elements } from '@stripe/react-stripe-js';
-import StripeCheckout from './StripeCheckout';
 
 const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
 
@@ -146,6 +144,21 @@ export default function ClienteMenu() {
   const [errorFormulario, setErrorFormulario] = useState('');
   
   const [configuracion, setConfiguracion] = useState(null);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get('success') === 'true') {
+      const tid = searchParams.get('ticketId');
+      if (tid) {
+        import('firebase/firestore').then(({ updateDoc, doc }) => {
+          updateDoc(doc(db, 'pedidos', tid), { cobrado: true, metodoPago: 'stripe' }).catch(console.error);
+        });
+        setTicketId(tid);
+        setPedidoConfirmado(true);
+        setClientSecret('pagado'); // Esto muestra el check verde
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const qFranjas = query(collection(db, 'franjas'), where('local', '==', LOCAL_ID));
@@ -458,7 +471,6 @@ const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
   const handlePagarAhora = async () => {
     setProcesandoPago(true);
     try {
-      // Usamos fetch directamente porque es más fiable en red local que el SDK de emuladores
       const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
       const baseUrl = import.meta.env.DEV 
         ? `http://${window.location.hostname}:5001/${projectId}/us-central1/createStripePaymentIntent`
@@ -470,46 +482,28 @@ const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
         body: JSON.stringify({ 
           data: { 
             total: calcularTotal(),
-            stripeAccountId: null // TEMPORALMENTE NULL PARA PROBAR APPLE PAY EN LA CUENTA PLATAFORMA
+            stripeAccountId: configuracion?.stripeAccountId || null,
+            returnUrl: window.location.origin + window.location.pathname,
+            ticketId: ticketId
           } 
         })
       });
       const result = await response.json();
       
-      if (result.result && result.result.clientSecret) {
-        setClientSecret(result.result.clientSecret);
-        setOpcionesPagoVisible(true);
+      if (result.result && result.result.url) {
+        window.location.href = result.result.url;
       } else {
-        throw new Error("No se pudo obtener el client secret");
+        throw new Error("No se pudo obtener la URL de Stripe Checkout");
       }
     } catch (error) {
       console.error(error);
-      alert('Error al contactar con el servidor. ¿Está encendido el emulador?');
+      alert('Error al contactar con el servidor de pagos. Inténtalo de nuevo.');
+      setProcesandoPago(false);
     }
-    setProcesandoPago(false);
   };
 
   if (pedidoConfirmado) {
-    if (opcionesPagoVisible && clientSecret) {
-      return (
-        <div className="min-h-screen bg-orange-50/40 p-4 flex items-center justify-center font-sans antialiased">
-          <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: 'stripe' } }}>
-            <StripeCheckout 
-              onPagoExitoso={async () => {
-                // Actualizamos el pedido en la base de datos a COBRADO = true
-                const { updateDoc, doc } = await import('firebase/firestore');
-                await updateDoc(doc(db, 'pedidos', ticketId), { cobrado: true, metodoPago: 'stripe' });
-                setOpcionesPagoVisible(false); // Volvemos al ticket pero ya saldrá como pagado
-                // Un pequeño truco visual: recargamos la info local
-                setClientSecret('pagado'); 
-              }}
-              onVolver={() => setOpcionesPagoVisible(false)}
-              montoTotal={calcularTotal()}
-            />
-          </Elements>
-        </div>
-      );
-    }
+
 
     const estaPagadoVisual = clientSecret === 'pagado';
 
