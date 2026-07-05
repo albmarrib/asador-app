@@ -19,7 +19,6 @@ exports.createStripePaymentIntent = functions.https.onCall(async (data, context)
     const amountInCents = Math.round(total * 100);
 
     const sessionConfig = {
-      payment_method_types: ['card'], // Incluye Apple Pay y Google Pay en Checkout
       line_items: [
         {
           price_data: {

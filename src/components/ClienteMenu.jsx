@@ -577,7 +577,7 @@ const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
               </button>
             </div>
           ) : (
-            <button onClick={() => window.location.reload()} className="w-full bg-slate-800 text-white font-bold py-3 rounded-xl text-xs uppercase cursor-pointer">Hacer otro pedido</button>
+            <button onClick={() => window.location.href = window.location.origin + window.location.pathname + '?modo=cliente'} className="w-full bg-slate-800 text-white font-bold py-3 rounded-xl text-xs uppercase cursor-pointer">Hacer otro pedido</button>
           )}
         </div>
       </div>
