@@ -45,7 +45,16 @@ export default function StripeCheckout({ onPagoExitoso, onVolver, montoTotal }) 
       
       <form onSubmit={handleSubmit} className="space-y-6 text-left">
         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 min-h-[60px] space-y-4">
-          <ExpressCheckoutElement onConfirm={handleSubmit} />
+          <ExpressCheckoutElement 
+            onConfirm={handleSubmit} 
+            options={{
+              wallets: {
+                applePay: 'always',
+                googlePay: 'always',
+                link: 'never'
+              }
+            }}
+          />
           <div className="relative flex items-center py-2">
             <div className="flex-grow border-t border-slate-300"></div>
             <span className="flex-shrink-0 mx-4 text-slate-400 text-sm font-medium">O pagar con tarjeta</span>
