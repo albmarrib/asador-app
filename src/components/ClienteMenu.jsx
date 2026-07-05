@@ -470,7 +470,7 @@ const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
         body: JSON.stringify({ 
           data: { 
             total: calcularTotal(),
-            stripeAccountId: configuracion?.stripeAccountId || null
+            stripeAccountId: null // TEMPORALMENTE NULL PARA PROBAR APPLE PAY EN LA CUENTA PLATAFORMA
           } 
         })
       });
