@@ -150,10 +150,16 @@ export default function ClienteMenu() {
     if (searchParams.get('success') === 'true') {
       const tid = searchParams.get('ticketId');
       if (tid) {
-        import('firebase/functions').then(({ httpsCallable }) => {
-          const markAsPaid = httpsCallable(functions, 'markOrderAsPaid');
-          markAsPaid({ ticketId: tid }).catch(console.error);
-        });
+        const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
+        const baseUrl = import.meta.env.DEV 
+          ? `http://${window.location.hostname}:5001/${projectId}/us-central1/markOrderAsPaid`
+          : `https://us-central1-${projectId}.cloudfunctions.net/markOrderAsPaid`;
+        
+        fetch(baseUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: { ticketId: tid } })
+        }).catch(console.error);
         setTicketId(tid);
         setPedidoConfirmado(true);
         setClientSecret('pagado'); // Esto muestra el check verde
