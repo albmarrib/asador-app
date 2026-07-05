@@ -565,7 +565,7 @@ const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
                 disabled={procesandoPago}
                 className="w-full bg-black text-white py-4 px-5 rounded-2xl shadow-lg flex justify-between items-center text-sm font-black uppercase tracking-wider transition-all hover:bg-gray-800 disabled:opacity-50"
               >
-                <span>💳 Pagar Ahora (Tarjeta / Apple Pay)</span>
+                <span>💳 Pagar Ahora (Tarjeta / Apple / Google)</span>
                 <span>{procesandoPago ? '⌛' : '⚡'}</span>
               </button>
               
