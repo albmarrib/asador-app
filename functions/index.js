@@ -33,8 +33,12 @@ exports.createStripePaymentIntent = functions.https.onCall(async (data, context)
         },
       ],
       mode: 'payment',
-      success_url: `${returnUrl}?success=true&ticketId=${ticketId}`,
-      cancel_url: `${returnUrl}?cancel=true&ticketId=${ticketId}`,
+      success_url: returnUrl.includes('?') 
+        ? `${returnUrl}&success=true&ticketId=${ticketId}` 
+        : `${returnUrl}?success=true&ticketId=${ticketId}`,
+      cancel_url: returnUrl.includes('?') 
+        ? `${returnUrl}&cancel=true&ticketId=${ticketId}`
+        : `${returnUrl}?cancel=true&ticketId=${ticketId}`,
     };
 
     let session;

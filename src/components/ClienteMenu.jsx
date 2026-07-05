@@ -487,8 +487,8 @@ const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
           data: { 
             total: calcularTotal(),
             stripeAccountId: configuracion?.stripeAccountId || null,
-            returnUrl: window.location.origin + window.location.pathname,
-            ticketId: ticketId
+            ticketId: ticketId,
+            returnUrl: window.location.origin + window.location.pathname + '?modo=cliente'
           } 
         })
       });
