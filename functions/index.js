@@ -38,6 +38,7 @@ exports.createStripePaymentIntent = functions.https.onCall(async (data, context)
       cancel_url: returnUrl.includes('?') 
         ? `${returnUrl}&cancel=true&ticketId=${ticketId}`
         : `${returnUrl}?cancel=true&ticketId=${ticketId}`,
+      client_reference_id: ticketId,
     };
 
     let session;
@@ -74,27 +75,40 @@ exports.markOrderAsPaid = functions.https.onCall(async (data, context) => {
   }
 });
 
-// Endpoint HTTP puro indestructible (sin problemas de CORS ni preflight en Safari)
-exports.markOrderAsPaidHttp = functions.https.onRequest(async (req, res) => {
-  res.set('Access-Control-Allow-Origin', '*');
-  res.set('Access-Control-Allow-Methods', 'GET, POST');
-  
-  const ticketId = req.query.ticketId || (req.body && req.body.ticketId);
-  
-  if (!ticketId) {
-    res.status(400).send('Falta ticketId');
+// Endpoint del Webhook oficial de Stripe
+exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      req.rawBody, 
+      sig, 
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+  } catch (err) {
+    console.error(`Webhook Error: ${err.message}`);
+    res.status(400).send(`Webhook Error: ${err.message}`);
     return;
   }
-  
-  try {
-    await admin.firestore().collection('pedidos').doc(ticketId).update({
-      cobrado: true,
-      metodoPago: 'stripe'
-    });
-    res.status(200).send('OK');
-  } catch (error) {
-    console.error('Error actualizando pedido:', error);
-    res.status(500).send('Error');
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object;
+    const ticketId = session.client_reference_id;
+
+    if (ticketId) {
+      try {
+        await admin.firestore().collection('pedidos').doc(ticketId).update({
+          cobrado: true,
+          metodoPago: 'stripe'
+        });
+        console.log(`Pedido ${ticketId} marcado como cobrado exitosamente desde Webhook.`);
+      } catch (error) {
+        console.error('Error actualizando pedido desde webhook:', error);
+      }
+    }
   }
+
+  res.json({ received: true });
 });
 

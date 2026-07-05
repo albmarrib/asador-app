@@ -150,13 +150,8 @@ export default function ClienteMenu() {
     if (searchParams.get('success') === 'true') {
       const tid = searchParams.get('ticketId');
       if (tid) {
-        const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
-        const baseUrl = import.meta.env.DEV 
-          ? `http://${window.location.hostname}:5001/${projectId}/us-central1/markOrderAsPaidHttp`
-          : `https://us-central1-${projectId}.cloudfunctions.net/markOrderAsPaidHttp`;
-        
-        // Petición GET ciega indestructible que se salta cualquier bloqueo de CORS de Safari
-        fetch(`${baseUrl}?ticketId=${tid}`, { mode: 'no-cors' }).catch(console.error);
+        // El Webhook del servidor ya está procesando el pago en segundo plano.
+        // Aquí solo mostramos la pantalla de éxito al cliente de forma instantánea.
         setTicketId(tid);
         setPedidoConfirmado(true);
         setClientSecret('pagado'); // Esto muestra el check verde

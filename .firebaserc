@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "asador-dev"
+    "default": "asador-dev",
+    "produccion": "asador-saas"
   }
 }
