@@ -71,3 +71,27 @@ exports.markOrderAsPaid = functions.https.onCall(async (data, context) => {
   }
 });
 
+// Endpoint HTTP puro indestructible (sin problemas de CORS ni preflight en Safari)
+exports.markOrderAsPaidHttp = functions.https.onRequest(async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET, POST');
+  
+  const ticketId = req.query.ticketId || (req.body && req.body.ticketId);
+  
+  if (!ticketId) {
+    res.status(400).send('Falta ticketId');
+    return;
+  }
+  
+  try {
+    await admin.firestore().collection('pedidos').doc(ticketId).update({
+      cobrado: true,
+      metodoPago: 'stripe'
+    });
+    res.status(200).send('OK');
+  } catch (error) {
+    console.error('Error actualizando pedido:', error);
+    res.status(500).send('Error');
+  }
+});
+

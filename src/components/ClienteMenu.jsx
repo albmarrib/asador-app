@@ -152,14 +152,11 @@ export default function ClienteMenu() {
       if (tid) {
         const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
         const baseUrl = import.meta.env.DEV 
-          ? `http://${window.location.hostname}:5001/${projectId}/us-central1/markOrderAsPaid`
-          : `https://us-central1-${projectId}.cloudfunctions.net/markOrderAsPaid`;
+          ? `http://${window.location.hostname}:5001/${projectId}/us-central1/markOrderAsPaidHttp`
+          : `https://us-central1-${projectId}.cloudfunctions.net/markOrderAsPaidHttp`;
         
-        fetch(baseUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: { ticketId: tid } })
-        }).catch(console.error);
+        // Petición GET ciega indestructible que se salta cualquier bloqueo de CORS de Safari
+        fetch(`${baseUrl}?ticketId=${tid}`, { mode: 'no-cors' }).catch(console.error);
         setTicketId(tid);
         setPedidoConfirmado(true);
         setClientSecret('pagado'); // Esto muestra el check verde
