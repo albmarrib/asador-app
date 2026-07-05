@@ -150,8 +150,9 @@ export default function ClienteMenu() {
     if (searchParams.get('success') === 'true') {
       const tid = searchParams.get('ticketId');
       if (tid) {
-        import('firebase/firestore').then(({ updateDoc, doc }) => {
-          updateDoc(doc(db, 'pedidos', tid), { cobrado: true, metodoPago: 'stripe' }).catch(console.error);
+        import('firebase/functions').then(({ httpsCallable }) => {
+          const markAsPaid = httpsCallable(functions, 'markOrderAsPaid');
+          markAsPaid({ ticketId: tid }).catch(console.error);
         });
         setTicketId(tid);
         setPedidoConfirmado(true);

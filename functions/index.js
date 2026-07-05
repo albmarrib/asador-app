@@ -55,3 +55,19 @@ exports.createStripePaymentIntent = functions.https.onCall(async (data, context)
     throw new functions.https.HttpsError('internal', 'Error al procesar el pago.');
   }
 });
+
+exports.markOrderAsPaid = functions.https.onCall(async (data, context) => {
+  const { ticketId } = data;
+  if (!ticketId) throw new functions.https.HttpsError('invalid-argument', 'Falta el ID del ticket');
+  try {
+    await admin.firestore().collection('pedidos').doc(ticketId).update({
+      cobrado: true,
+      metodoPago: 'stripe'
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Error actualizando pedido:', error);
+    throw new functions.https.HttpsError('internal', 'Error al actualizar pedido');
+  }
+});
+
