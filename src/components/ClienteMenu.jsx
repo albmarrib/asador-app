@@ -555,20 +555,26 @@ const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
           
           {!estaPagadoVisual ? (
             <div className="space-y-3">
-              <button
-                onClick={handlePagarAhora}
-                disabled={procesandoPago}
-                className="w-full bg-black text-white py-4 px-5 rounded-2xl shadow-lg flex justify-between items-center text-sm font-black uppercase tracking-wider transition-all hover:bg-gray-800 disabled:opacity-50"
-              >
-                <span>💳 Pagar Ahora (Tarjeta / Apple / Google)</span>
-                <span>{procesandoPago ? '⌛' : '⚡'}</span>
-              </button>
+              {configuracion?.pagosOnline !== false ? (
+                <button
+                  onClick={handlePagarAhora}
+                  disabled={procesandoPago}
+                  className="w-full bg-black text-white py-4 px-5 rounded-2xl shadow-lg flex justify-between items-center text-sm font-black uppercase tracking-wider transition-all hover:bg-gray-800 disabled:opacity-50 cursor-pointer"
+                >
+                  <span>💳 Pagar Ahora (Tarjeta / Apple / Google)</span>
+                  <span>{procesandoPago ? '⌛' : '⚡'}</span>
+                </button>
+              ) : (
+                <div className="bg-orange-50 border-2 border-orange-100 p-4 rounded-xl text-orange-800 font-bold text-sm">
+                  💳 Los pagos online están desactivados en este asador. El pago se realizará íntegramente en el mostrador al recoger tu pedido.
+                </div>
+              )}
               
               <button
                 onClick={() => window.location.reload()}
-                className="w-full bg-orange-100 text-orange-900 py-4 px-5 rounded-2xl shadow-sm flex justify-center items-center text-sm font-black uppercase tracking-wider transition-all hover:bg-orange-200"
+                className="w-full bg-orange-100 text-orange-900 py-4 px-5 rounded-2xl shadow-sm flex justify-center items-center text-sm font-black uppercase tracking-wider transition-all hover:bg-orange-200 cursor-pointer"
               >
-                <span>Pagaré al recogerlo</span>
+                <span>{configuracion?.pagosOnline !== false ? 'Pagaré al recogerlo' : 'Entendido, volver al inicio'}</span>
               </button>
             </div>
           ) : (

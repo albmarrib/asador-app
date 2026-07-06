@@ -1280,6 +1280,27 @@ const handleEditarProducto = async (producto) => {
                   />
                   <p className="text-[10px] text-slate-400 mt-2 font-bold uppercase">Dejar el campo vacío para hacer cobros de prueba a la cuenta principal.</p>
                 </div>
+
+                <div className="mt-4 bg-slate-50 border border-slate-200 p-4 rounded-xl flex items-center justify-between">
+                  <div>
+                    <label className="block text-xs font-black text-slate-700 uppercase">Aceptar Pagos Online</label>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">Comisión de Stripe: 1.5% + 0.25€</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      className="sr-only peer"
+                      checked={configuracion.pagosOnline !== false} 
+                      onChange={async (e) => {
+                        const valor = e.target.checked;
+                        if (configuracion.id) await updateDoc(doc(db, 'configuracion', configuracion.id), { pagosOnline: valor });
+                        else await addDoc(collection(db, 'configuracion'), { local: LOCAL_ID, pagosOnline: valor });
+                      }}
+                    />
+                    <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                  </label>
+                </div>
+
                 <button 
                   onClick={async () => {
                     const idLimpio = stripeAccountIdTemp.trim();
