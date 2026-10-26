@@ -27,5 +27,6 @@ dist-ssr
 .env
 .env.development
 .env.production
-.env.localfunctions/.env.asador-dev
+.env.local
+functions/.env.asador-dev
 functions/.env.asador-saas

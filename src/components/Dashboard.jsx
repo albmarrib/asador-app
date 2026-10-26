@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
+import { db, functions } from '../firebase';
+import { httpsCallable } from 'firebase/functions';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
 
 const LOCAL_ID = 'asador-dc';
@@ -313,11 +314,28 @@ export default function Dashboard() {
   };
   
   const handleCobrarPedido = async (id, tipoFianza = null) => {
-    const actualizacion = { entregado: true, cobrado: true };
-    if (tipoFianza) actualizacion.fianza = tipoFianza;
-    await updateDoc(doc(db, 'pedidos', id), actualizacion);
-    setPedidoSeleccionado(null); 
-    setBusqueda('');
+    // 1. Mostrar estado de carga (opcional, pero recomendado)
+    // setIsEnviandoTPV(true); // Asumiendo que quisieras un spinner
+
+    try {
+      // 2. Disparar al TPV
+      const enviarTPV = httpsCallable(functions, 'enviarPedidoTPV');
+      await enviarTPV({ pedidoId: id });
+      
+      // 3. Marcar como cobrado en Firebase
+      const actualizacion = { entregado: true, cobrado: true };
+      if (tipoFianza) actualizacion.fianza = tipoFianza;
+      await updateDoc(doc(db, 'pedidos', id), actualizacion);
+      
+      setPedidoSeleccionado(null); 
+      setBusqueda('');
+      // alert("Pedido enviado al TPV y cobrado con éxito.");
+    } catch (error) {
+      console.error("Error al enviar al TPV:", error);
+      alert("❌ Error de comunicación con TPV RestauGest. Debes cobrar el ticket manualmente en la caja.\\nDetalle: " + error.message);
+      // Opcional: ¿Aún así lo marcamos como cobrado en Firebase si falla el TPV? 
+      // Si la cajera lo va a picar a mano, sí.
+    }
   };
 
   const handleDevolverFianza = async (id) => {
@@ -542,10 +560,18 @@ const detalleTexto = `${stockConsumido} | ` + lineasTicket.join(' + ');
     const lineasTicket = [];
     let stockConsumido = 0;
 
+    const carritoData = [];
     Object.entries(vdCarritoExtras).forEach(([prodId, cant]) => {
       const prodInfo = productos.find(p => p.id === prodId);
       if (prodInfo) {
         lineasTicket.push(`${cant}x ${prodInfo.nombre}`);
+        carritoData.push({
+          id: prodInfo.id,
+          nombre: prodInfo.nombre,
+          cantidad: cant,
+          precio: prodInfo.precio,
+          codigoTPV: prodInfo.codigoTPV || '0000000000'
+        });
         if (prodInfo.controlaStock && prodInfo.nombre.toUpperCase().includes('POLLO')) {
           stockConsumido += (parseFloat(prodInfo.consumeUnidades) * cant);
         }
@@ -565,6 +591,7 @@ const detalleTexto = `${stockConsumido} | ` + lineasTicket.join(' + ');
         cliente: "VENTA DIRECTA",
         hora: franjaDestino.hora.split(' ')[0],
         detalle: detalleTexto,
+        carritoData: carritoData,
         entregado: true,
         origen: 'Mostrador Directo',
         creadoEn: new Date()

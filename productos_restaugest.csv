@@ -1,0 +1,72 @@
+Codigo_RestauGest;Categoria_App;Nombre_ES;Nombre_CA;Nombre_EN;Nombre_FR;Precio;Control_Hornadas;Minutos_Coccion;Resta_Hornada;Orden
+1000;ENTRANTS_FREDS;Ensalada Verde;Amanida Verda;Green Salad;Salade Verte;5.0;NO;0;0;10
+1001;ENTRANTS_FREDS;Ensalada de Arroz;Amanida d'Arròs;Rice Salad;Salade de Riz;7.0;NO;0;0;20
+1002;ENTRANTS_FREDS;Ensalada de Pasta;Amanida de Pasta;Pasta Salad;Salade de Pâtes;7.0;NO;0;0;30
+1003;ENTRANTS_FREDS;Ensaladilla Rusa;Amanida Russa;Russian Salad;Salade Russe;7.0;NO;0;0;40
+1004;ENTRANTS_FREDS;Escalivada;Escalivada;Roasted Vegetables;Légumes Grillés;8.0;NO;0;0;50
+1045;ENTRANTS_FREDS;Bolsas;Bosses;Bags;Sacs;0.2;NO;0;0;60
+1046;ENTRANTS_FREDS;Envase Pollo;Envàs Pollastre;Chicken Container;Emballage Poulet;0.5;NO;0;0;70
+1065;ENTRANTS_FREDS;P. Olot (Patatas);P. Olot;Olot Potatoes;Pommes de terre d'Olot;2.0;NO;0;0;80
+1067;ENTRANTS_FREDS;Pan;Pa;Bread;Pain;1.8;NO;0;0;90
+1068;ENTRANTS_FREDS;Gazpacho;Gaspatxo;Gazpacho;Gaspacho;4.0;NO;0;0;100
+1090;ENTRANTS_FREDS;All i Oli Cristal;All i Oli Vidre;Aioli (Glass);Aïoli (Verre);4.0;NO;0;0;110
+1005;GUARNIMENTS;Patatas Fritas;Patates Fregides;French Fries;Frites;3.5;NO;0;0;10
+1006;GUARNIMENTS;Patatas Bravas;Patates Braves;Patatas Bravas;Patatas Bravas;3.8;NO;0;0;20
+1007;GUARNIMENTS;Patata al Caliu (1 ud);Patata Caliu (1 u);Baked Potato;Pomme de terre au four;1.8;SI;60;1;30
+1009;GUARNIMENTS;Nuggets de Pollo;Nuggets Pollastre;Chicken Nuggets;Nuggets de Poulet;0.0;NO;0;0;40
+1011;GUARNIMENTS;Aros de Cebolla;Anelles de Ceba;Onion Rings;Rondelles d'Oignon;0.0;NO;0;0;50
+1012;GUARNIMENTS;Calamares a la Andaluza;Calamars Andalusa;Andalusian Squid;Calamars à l'Andalouse;14.0;NO;0;0;60
+1013;GUARNIMENTS;Tortilla de Patata Entera;Truita de Patata Sencera;Whole Spanish Omelette;Omelette Espagnole Entière;25.0;NO;0;0;70
+1047;GUARNIMENTS;Croquetas;Croquetes;Croquettes;Croquettes;7.2;NO;0;0;80
+1060;GUARNIMENTS;Ración Tortilla;T. Patata Ració;Omelette Portion;Part d'Omelette;6.0;NO;0;0;90
+1066;GUARNIMENTS;Ración Empanada;Empanada Ració;Empanada Portion;Part d'Empanada;6.0;NO;0;0;100
+1016;A_LAST;1/2 Pollo;1/2 Pollastre;1/2 Chicken;1/2 Poulet;7.2;SI;90;0.5;10
+1017;A_LAST;Pollo;Pollastre;Chicken;Poulet;13.5;SI;90;1;20
+1018;A_LAST;Butifarra;Botifarra;Sausage;Saucisse;4.0;SI;60;1;30
+1019;A_LAST;Costilla de Cerdo;Costelló de Porc;Pork Rib;Travers de Porc;0.0;NO;0;0;40
+1020;A_LAST;Conejo (Por encargo);Conill (Encàrrec);Rabbit (Pre-order);Lapin (Sur commande);0.0;NO;0;0;50
+1048;A_LAST;Canelones;Canelons;Cannelloni;Cannelloni;10.5;NO;0;0;60
+1021;ENTRANTS_CALENTS;Macarrones Boloñesa;Macarrons Bolonyesa;Bolognese Macaroni;Macaronis Bolognaise;8.0;NO;0;0;10
+1022;ENTRANTS_CALENTS;Espaguetis Carbonara;Espaguetis Carbonara;Carbonara Spaghetti;Spaghettis Carbonara;0.0;NO;0;0;20
+1023;ENTRANTS_CALENTS;Tallarines con Verduras;Tallerines amb Verdures;Noodles with Vegetables;Nouilles aux Légumes;0.0;NO;0;0;30
+1024;ENTRANTS_CALENTS;Lasaña de Carne;Lasanya de Carn;Meat Lasagna;Lasagnes à la Viande;0.0;NO;0;0;40
+1025;ENTRANTS_CALENTS;Canelones Caseros (5 ud);Canelons Casolans (5 u);Homemade Cannelloni (5 pcs);Cannellonis Maison (5 pcs);10.5;NO;0;0;50
+1026;ENTRANTS_CALENTS;Fideuá;Fideuà;Fideua;Fideua;17.0;NO;0;0;60
+1027;ENTRANTS_CALENTS;Arroz Paella;Arròs Paella;Paella Rice;Riz Paella;18.0;NO;0;0;70
+1028;ENTRANTS_CALENTS;Caracoles a la Llauna;Cargols a la Llauna;Snails "a la llauna";Escargots "a la llauna";0.0;NO;0;0;80
+1061;ENTRANTS_CALENTS;Fianza Paellera;Fiança Paellera;Pan Deposit;Caution Poêle;20.0;NO;0;0;90
+1029;SEGONS_PLATS;Albóndigas con Salsa;Mandonguilles amb Salsa;Meatballs with Sauce;Boulettes en Sauce;0.0;NO;0;0;10
+1031;SEGONS_PLATS;Pies de Cerdo;Peus de Porc;Pig Trotters;Pieds de Porc;0.0;NO;0;0;20
+1032;SEGONS_PLATS;Calamares Encebollados;Calamars Encebats;Squid with Onions;Calamars aux Oignons;0.0;NO;0;0;30
+1033;SEGONS_PLATS;Carrillera Asada;Galta Rostida;Roasted Pork Cheek;Joue de Porc Rôtie;10.0;NO;0;0;40
+1034;PIZZES;Margarita;Margarita;Margherita;Margherita;12.0;NO;0;0;10
+1035;PIZZES;Jamón;Pernil;Ham;Jambon;14.0;NO;0;0;20
+1036;PIZZES;Pepperoni;Peperoni;Pepperoni;Pepperoni;14.0;NO;0;0;30
+1037;PIZZES;4 Quesos;4 Formatges;4 Cheeses;4 Fromages;15.0;NO;0;0;40
+1062;PIZZES;Atún;Tonyina;Tuna;Thon;14.0;NO;0;0;50
+1063;PIZZES;Bacon;Bacon;Bacon;Bacon;14.0;NO;0;0;60
+1064;PIZZES;Atún;Tonyina;Tuna;Thon;14.0;NO;0;0;70
+1038;BEGUDES_ALTRES;Refresco;Refresc;Soft Drink;Boisson Fraîche;2.5;NO;0;0;10
+1039;BEGUDES_ALTRES;Cerveza;Cervesa;Beer;Bière;2.3;NO;0;0;20
+1040;BEGUDES_ALTRES;Agua 0.5L;Aigua 0'5;Water 0.5L;Eau 0.5L;1.5;NO;0;0;30
+1041;BEGUDES_ALTRES;Agua 1.5L;Aigua 1,5l;Water 1.5L;Eau 1.5L;2.0;NO;0;0;40
+1042;BEGUDES_ALTRES;All i Oli;All i Oli;Aioli;Aïoli;2.0;NO;0;0;50
+1043;BEGUDES_ALTRES;Chips Pequeñas;Chips Petita;Small Chips;Petites Chips;2.0;NO;0;0;60
+1044;BEGUDES_ALTRES;Chips Grandes;Chips Gran;Large Chips;Grandes Chips;3.0;NO;0;0;70
+1049;BEGUDES_ALTRES;Cubiertos;Coberts;Cutlery;Couverts;1.0;NO;0;0;80
+1059;BEGUDES_ALTRES;Sobres de Salsa;Sobres Salsa;Sauce Packets;Sachets de Sauce;0.5;NO;0;0;90
+1069;GELATS;Calipo;Calipo;Calipo;Calipo;2.9;NO;0;0;10
+1070;GELATS;Frigurón;Frigurón;Frigurón;Frigurón;2.9;NO;0;0;20
+1071;GELATS;Twister;Twister;Twister;Twister;2.9;NO;0;0;30
+1072;GELATS;Dinosaurios;Dinosaures;Dinosaur Ice Cream;Glace Dinosaure;3.5;NO;0;0;40
+1073;GELATS;Filipinos;Filipinos;Filipinos;Filipinos;3.5;NO;0;0;50
+1074;GELATS;Caramel Nuts;Caramel Nuts;Caramel Nuts;Caramel Nuts;3.5;NO;0;0;60
+1076;GELATS;Cornetto Nata;Cornetto Nata;Cornetto Cream;Cornetto Crème;3.2;NO;0;0;70
+1077;GELATS;Cornetto XXL;Cornetto XXL;Cornetto XXL;Cornetto XXL;3.8;NO;0;0;80
+1078;GELATS;Cornetto Choc'n'ball;Corneto Chocnibal;Cornetto Choc'n'ball;Cornetto Choc'n'ball;3.5;NO;0;0;90
+1079;GELATS;Cornetto Pistacho;Corneto Festuc;Cornetto Pistachio;Cornetto Pistache;3.5;NO;0;0;100
+1080;GELATS;Magnum Almendra;Magnum Ametlla;Magnum Almond;Magnum Amande;3.8;NO;0;0;110
+1081;GELATS;Magnum Blanco;Magnum Blanco;Magnum White;Magnum Blanc;3.8;NO;0;0;120
+1082;GELATS;Magnum Doble Chocolate;Magnum Doble Ch.;Magnum Double Chocolate;Magnum Double Chocolat;4.1;NO;0;0;130
+1083;GELATS;Magnum Doble Gold;Magnun Doble Gold;Magnum Double Gold;Magnum Double Gold;4.1;NO;0;0;140
+1084;GELATS;Magnum Pistacho;Magnum Festuc;Magnum Pistachio;Magnum Pistache;4.1;NO;0;0;150

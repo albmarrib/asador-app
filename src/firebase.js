@@ -25,7 +25,7 @@ export const auth = getAuth(app);
 export const functions = getFunctions(app);
 
 // Use local emulator in development mode
-if (import.meta.env.DEV) {
-  // window.location.hostname permite que funcione tanto en tu PC (localhost) como en el móvil (IP)
-  connectFunctionsEmulator(functions, window.location.hostname, 5001);
-}
+// if (import.meta.env.DEV) {
+//   // window.location.hostname permite que funcione tanto en tu PC (localhost) como en el móvil (IP)
+//   connectFunctionsEmulator(functions, window.location.hostname, 5001);
+// }

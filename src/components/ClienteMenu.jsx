@@ -438,9 +438,19 @@ const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
 
     const unidadesConsumidas = calcularPollosConsumidos();
     const lineasTicket = [];
+    const carritoData = [];
     Object.entries(carrito).forEach(([id, cant]) => {
       const p = productos.find(x => x.id === id);
-      if (p) lineasTicket.push(`${cant}x ${p.nombre}`);
+      if (p) {
+        lineasTicket.push(`${cant}x ${p.nombre}`);
+        carritoData.push({
+          id: p.id,
+          nombre: p.nombre,
+          cantidad: cant,
+          precio: p.precio,
+          codigoTPV: p.codigoTPV || '0000000000'
+        });
+      }
     });
     
     const detalleTexto = `${unidadesConsumidas} | ` + lineasTicket.join(' + ');
@@ -451,6 +461,7 @@ const totalArticulos = Object.values(carrito).reduce((sum, q) => sum + q, 0);
         cliente: nombreCliente.trim().toUpperCase(),
         hora: horaRecogida,
         detalle: detalleTexto,
+        carritoData: carritoData,
         entregado: false,
         cobrado: false,
         metodoPago: 'mostrador',

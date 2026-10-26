@@ -1,0 +1,9 @@
+ID_Categoria;Nombre_ES;Nombre_CA;Nombre_EN;Nombre_FR;Orden
+ENTRANTS_FREDS;Entrantes Fríos;Entrants Freds;Cold Starters;Entrées Froides;10
+GUARNIMENTS;Guarniciones;Guarniments;Side Dishes;Accompagnements;20
+A_LAST;Asados (A l'Ast);A l'Ast;Rotisserie (A l'Ast);Rôtisserie (A l'Ast);30
+ENTRANTS_CALENTS;Entrantes Calientes;Entrants Calents;Hot Starters;Entrées Chaudes;40
+SEGONS_PLATS;Segundos Platos;Segons Plats;Main Courses;Plats Principaux;50
+PIZZES;Pizzas;Pizzes;Pizzas;Pizzas;60
+BEGUDES_ALTRES;Bebidas y Otros;Begudes i Altres;Drinks & Others;Boissons et Autres;70
+GELATS;Helados;Gelats;Ice Creams;Glaces;80
